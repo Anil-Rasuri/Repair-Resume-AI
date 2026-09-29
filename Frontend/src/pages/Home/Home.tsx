@@ -8,12 +8,16 @@ import {
 import { Link } from "react-router-dom";
 import Navbar from "../../components/layout/Navbar";
 
+
+
 function Home() {
   return (
+    
     <div className="min-h-screen bg-[#F4F7FF] text-slate-900">
       <Navbar />
 
       <main>
+        
         {/* =====================================================
             HERO
         ===================================================== */}
@@ -498,6 +502,7 @@ function Home() {
         </div>
       </footer>
     </div>
+    
   );
 }
 
