@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+html {
+  overflow-y: scroll;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  text-decoration: none;
+}
