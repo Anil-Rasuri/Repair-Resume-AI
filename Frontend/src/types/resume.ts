@@ -32,6 +32,7 @@ export interface Internship {
 
 export interface Education {
   degree: string;
+  branch?: string;
   institution: string;
   location?: string;
   start_date: string;

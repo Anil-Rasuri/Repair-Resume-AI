@@ -1,23 +1,31 @@
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  Download,
+  FileText,
   Loader2,
   Plus,
+  X,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import PersonalInfoForm from "../../components/resume/PersonalInfoForm";
 import SummaryForm from "../../components/resume/SummaryForm";
 import SkillsForm from "../../components/resume/SkillsForm";
-import ExperienceForm from "../../components/resume/ExperienceForm";
-import InternshipForm from "../../components/resume/InternshipForm";
 import EducationForm from "../../components/resume/EducationForm";
 import ProjectsForm from "../../components/resume/ProjectsForm";
 import CertificationForm from "../../components/resume/CertificationForm";
+import InternshipForm from "../../components/resume/InternshipForm";
+import ExperienceForm from "../../components/resume/ExperienceForm";
 import ResumePreview from "../../components/resume/ResumePreview";
+import TemplateSelector from "../../components/resume/TemplateSelector";
 
 import { createResume } from "../../services/api";
+import {
+  downloadResumePdf,
+  downloadResumeWord,
+} from "../../services/ResumeDownload";
 
 import type {
   Certification,
@@ -30,7 +38,9 @@ import type {
   Skills,
 } from "../../types/resume";
 
-const initialPersonalInfo: PersonalInfo = {
+import type { ResumeTemplate } from "../../templates/templateTypes";
+
+const emptyPersonalInfo: PersonalInfo = {
   full_name: "",
   professional_title: "",
   email: "",
@@ -41,97 +51,182 @@ const initialPersonalInfo: PersonalInfo = {
   portfolio: "",
 };
 
-const initialSkills: Skills = {
+const emptySkills: Skills = {
   technical: [],
   soft: [],
   other: [],
 };
 
-interface SectionHeaderProps {
-  number: string;
-  title: string;
-  description: string;
-  onAdd?: () => void;
-  addLabel?: string;
-}
+const emptyExperience = (): Experience => ({
+  job_title: "",
+  company: "",
+  location: "",
+  start_date: "",
+  end_date: "",
+  currently_working: false,
+  description: "",
+});
+
+const emptyInternship = (): Internship => ({
+  internship_title: "",
+  company: "",
+  location: "",
+  start_date: "",
+  end_date: "",
+  currently_working: false,
+  description: "",
+  technologies: [],
+});
+
+const emptyCertification = (): Certification => ({
+  name: "",
+  issuing_organization: "",
+  issue_date: "",
+  credential_id: "",
+  credential_url: "",
+});
 
 function SectionHeader({
   number,
   title,
   description,
-  onAdd,
-  addLabel,
-}: SectionHeaderProps) {
+  action,
+}: {
+  number: string;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-100 text-xs font-bold text-blue-700">
+    <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-200 text-xs font-semibold text-slate-600">
           {number}
-        </div>
+        </span>
 
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-slate-900">
             {title}
           </h2>
 
-          <p className="mt-0.5 text-[11px] text-slate-500">
-            {description}
-          </p>
+          {description && (
+            <p className="mt-0.5 text-xs leading-5 text-slate-500">
+              {description}
+            </p>
+          )}
         </div>
       </div>
 
-      {onAdd && addLabel && (
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-        >
-          <Plus size={14} />
-          {addLabel}
-        </button>
-      )}
+      {action}
     </div>
   );
 }
 
-function SectionBox({
-  number,
-  title,
-  description,
+function SectionAction({
+  onClick,
   children,
+  danger = false,
 }: {
-  number: string;
-  title: string;
-  description: string;
-  children: React.ReactNode;
+  onClick: () => void;
+  children: ReactNode;
+  danger?: boolean;
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <SectionHeader
-        number={number}
-        title={title}
-        description={description}
-      />
-
-      <div className="p-5">{children}</div>
-    </section>
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        danger
+          ? "inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50"
+          : "inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+      }
+    >
+      {children}
+    </button>
   );
 }
 
-function ResumeBuilder() {
-  const [personalInfo, setPersonalInfo] =
-    useState<PersonalInfo>(initialPersonalInfo);
+function DownloadButton({
+  onClick,
+  loading,
+  icon,
+  children,
+}: {
+  onClick: () => void;
+  loading: boolean;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        icon
+      )}
 
-  const [summary, setSummary] = useState("");
+      {loading ? "Preparing..." : children}
+    </button>
+  );
+}
+
+function hasCertificationContent(
+  certification: Certification
+): boolean {
+  return Boolean(
+    certification.name.trim() ||
+      certification.issuing_organization.trim() ||
+      certification.issue_date.trim() ||
+      certification.credential_id?.trim() ||
+      certification.credential_url?.trim()
+  );
+}
+
+function hasInternshipContent(
+  internship: Internship
+): boolean {
+  return Boolean(
+    internship.internship_title.trim() ||
+      internship.company.trim() ||
+      internship.location?.trim() ||
+      internship.start_date.trim() ||
+      internship.end_date?.trim() ||
+      internship.description.trim() ||
+      internship.technologies.some((technology) =>
+        technology.trim()
+      )
+  );
+}
+
+function hasExperienceContent(
+  experience: Experience
+): boolean {
+  return Boolean(
+    experience.job_title.trim() ||
+      experience.company.trim() ||
+      experience.location?.trim() ||
+      experience.start_date.trim() ||
+      experience.end_date?.trim() ||
+      experience.description.trim()
+  );
+}
+
+export default function ResumeBuilder() {
+  const navigate = useNavigate();
+
+  const [personalInfo, setPersonalInfo] =
+    useState<PersonalInfo>(emptyPersonalInfo);
+
+  const [professionalSummary, setProfessionalSummary] =
+    useState("");
 
   const [skills, setSkills] =
-    useState<Skills>(initialSkills);
-
-  const [experiences, setExperiences] =
-    useState<Experience[]>([]);
-
-  const [internships, setInternships] =
-    useState<Internship[]>([]);
+    useState<Skills>(emptySkills);
 
   const [education, setEducation] =
     useState<Education[]>([]);
@@ -142,6 +237,38 @@ function ResumeBuilder() {
   const [certifications, setCertifications] =
     useState<Certification[]>([]);
 
+  const [internships, setInternships] =
+    useState<Internship[]>([]);
+
+  const [experiences, setExperiences] =
+    useState<Experience[]>([]);
+
+  /*
+   * Live drafts
+   *
+   * These allow the preview to update while the user is typing
+   * instead of waiting until the user clicks Add.
+   */
+  const [certificationDraft, setCertificationDraft] =
+    useState<Certification | null>(null);
+
+  const [internshipDraft, setInternshipDraft] =
+    useState<Internship | null>(null);
+
+  /*
+   * Section visibility
+   *
+   * These control whether optional sections are enabled at all.
+   */
+  const [showCertificationSection, setShowCertificationSection] =
+    useState(true);
+
+  const [showInternshipSection, setShowInternshipSection] =
+    useState(true);
+
+  const [showExperienceSection, setShowExperienceSection] =
+    useState(true);
+
   const [showCertificationForm, setShowCertificationForm] =
     useState(false);
 
@@ -151,455 +278,846 @@ function ResumeBuilder() {
   const [showExperienceForm, setShowExperienceForm] =
     useState(false);
 
-  const [loading, setLoading] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<ResumeTemplate>("classic");
 
-  const [successMessage, setSuccessMessage] =
+  const [saving, setSaving] =
+    useState(false);
+
+  const [saveSuccess, setSaveSuccess] =
+    useState(false);
+
+  const [error, setError] =
     useState("");
 
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const [downloadingPdf, setDownloadingPdf] =
+    useState(false);
 
-  const resumeData: ResumeData = {
-    personal_info: personalInfo,
-    professional_summary:
-      summary.trim() || undefined,
-    skills,
-    experience: experiences,
-    internships,
-    education,
-    projects,
-    certifications,
-  };
+  const [downloadingWord, setDownloadingWord] =
+    useState(false);
 
-  const handleSubmit = async () => {
-    setSuccessMessage("");
-    setErrorMessage("");
+  /*
+   * Only include completed/somewhat-filled entries in the actual
+   * resume data.
+   *
+   * This prevents an empty form from creating an empty section
+   * inside the resume preview.
+   */
+  const visibleCertifications = useMemo(
+    () =>
+      certifications.filter(hasCertificationContent),
+    [certifications]
+  );
+
+  const visibleInternships = useMemo(
+    () =>
+      internships.filter(hasInternshipContent),
+    [internships]
+  );
+
+  const visibleExperiences = useMemo(
+    () =>
+      experiences.filter(hasExperienceContent),
+    [experiences]
+  );
+
+  const hasCertificationDraft =
+    certificationDraft !== null &&
+    hasCertificationContent(certificationDraft);
+
+  const hasInternshipDraft =
+    internshipDraft !== null &&
+    hasInternshipContent(internshipDraft);
+
+  const resumeData = useMemo<ResumeData>(
+    () => ({
+      personal_info: personalInfo,
+
+      professional_summary:
+        professionalSummary,
+
+      skills,
+
+      education,
+
+      projects,
+
+      certifications:
+        showCertificationSection
+          ? [
+              ...visibleCertifications,
+              ...(hasCertificationDraft &&
+              certificationDraft
+                ? [certificationDraft]
+                : []),
+            ]
+          : [],
+
+      internships:
+        showInternshipSection
+          ? [
+              ...visibleInternships,
+              ...(hasInternshipDraft &&
+              internshipDraft
+                ? [internshipDraft]
+                : []),
+            ]
+          : [],
+
+      experience:
+        showExperienceSection
+          ? visibleExperiences
+          : [],
+    }),
+    [
+      personalInfo,
+      professionalSummary,
+      skills,
+      education,
+      projects,
+      visibleCertifications,
+      certificationDraft,
+      hasCertificationDraft,
+      visibleInternships,
+      internshipDraft,
+      hasInternshipDraft,
+      visibleExperiences,
+      showCertificationSection,
+      showInternshipSection,
+      showExperienceSection,
+    ]
+  );
+
+  const handleSaveResume = async () => {
+    setError("");
+    setSaveSuccess(false);
 
     if (!personalInfo.full_name.trim()) {
-      setErrorMessage("Please enter your full name.");
+      setError("Please enter your full name.");
       return;
     }
 
     if (!personalInfo.professional_title.trim()) {
-      setErrorMessage(
-        "Please enter your professional title."
-      );
+      setError("Please enter your professional title.");
       return;
     }
 
     if (!personalInfo.email.trim()) {
-      setErrorMessage("Please enter your email.");
+      setError("Please enter your email address.");
       return;
     }
 
     if (!personalInfo.phone.trim()) {
-      setErrorMessage(
-        "Please enter your phone number."
-      );
+      setError("Please enter your phone number.");
       return;
     }
 
     if (!personalInfo.location.trim()) {
-      setErrorMessage(
-        "Please enter your location."
+      setError("Please enter your location.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      await createResume(resumeData);
+
+      setSaveSuccess(true);
+
+      window.setTimeout(() => {
+        setSaveSuccess(false);
+      }, 4000);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to save the resume. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    setError("");
+
+    const resumeElement =
+      window.document.getElementById(
+        "resume-preview-document"
+      );
+
+    if (!resumeElement) {
+      setError(
+        "Resume preview is not available. Please try again."
       );
       return;
     }
 
     try {
-      setLoading(true);
+      setDownloadingPdf(true);
 
-      const response = await createResume(resumeData);
-
-      console.log(
-        "Resume created successfully:",
-        response
+      await downloadResumePdf(
+        resumeElement,
+        resumeData
       );
-
-      setSuccessMessage(
-        "Resume information saved successfully."
-      );
-    } catch (error) {
-      console.error(
-        "Resume creation failed:",
-        error
-      );
-
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong while saving your resume."
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to generate the PDF. Please try again."
       );
     } finally {
-      setLoading(false);
+      setDownloadingPdf(false);
     }
   };
 
+  const handleDownloadWord = async () => {
+    setError("");
+
+    try {
+      setDownloadingWord(true);
+
+      await downloadResumeWord(resumeData);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to generate the Word document. Please try again."
+      );
+    } finally {
+      setDownloadingWord(false);
+    }
+  };
+
+  const handleCertificationDraftChange = (
+    draft: Certification | null
+  ) => {
+    setCertificationDraft(draft);
+  };
+
+  const handleInternshipDraftChange = (
+    draft: Internship | null
+  ) => {
+    setInternshipDraft(draft);
+  };
+
+  /*
+   * Certification section
+   */
+  const enableCertificationSection = () => {
+    setError("");
+    setShowCertificationSection(true);
+    setShowCertificationForm(true);
+
+    if (certifications.length === 0) {
+      setCertificationDraft(emptyCertification());
+    }
+  };
+
+  const removeCertificationSection = () => {
+    setCertifications([]);
+    setCertificationDraft(null);
+    setShowCertificationForm(false);
+    setShowCertificationSection(false);
+  };
+
+  /*
+   * Internship section
+   */
+  const enableInternshipSection = () => {
+    setError("");
+    setShowInternshipSection(true);
+    setShowInternshipForm(true);
+
+    if (internships.length === 0) {
+      setInternshipDraft(emptyInternship());
+    }
+  };
+
+  const removeInternshipSection = () => {
+    setInternships([]);
+    setInternshipDraft(null);
+    setShowInternshipForm(false);
+    setShowInternshipSection(false);
+  };
+
+  /*
+   * Experience section
+   */
+  const enableExperienceSection = () => {
+    setError("");
+    setShowExperienceSection(true);
+    setShowExperienceForm(true);
+
+    /*
+     * Important:
+     * Create the first empty experience immediately.
+     * This means clicking "Add Experience" opens the actual
+     * fields instead of showing only another "+ Add Experience"
+     * button.
+     */
+    if (experiences.length === 0) {
+      setExperiences([emptyExperience()]);
+    }
+  };
+
+  const removeExperienceSection = () => {
+    setExperiences([]);
+    setShowExperienceForm(false);
+    setShowExperienceSection(false);
+  };
+
   return (
-    <div className="min-h-screen bg-[#F4F7FF]">
+    <div className="min-h-screen bg-slate-100 text-slate-900">
 
-      {/* ================= HEADER ================= */}
-
+      {/* Navbar */}
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-[#F1F5F9]/95 shadow-sm backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-6">
-
-          <Link
-            to="/"
-            className="flex items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="flex items-center"
+            aria-label="Back to home"
           >
-            <ArrowLeft size={17} />
-            Back to Home
-          </Link>
+            <img
+              src="/logo.png"
+              alt="Repair Resume AI"
+              className="h-auto w-[155px] object-contain"
+            />
+          </button>
 
-          <div className="text-right">
-            <h1 className="text-base font-semibold text-slate-800">
-              Resume Builder
-            </h1>
-
-            <p className="text-xs text-slate-500">
-              Build your professional resume
-            </p>
-          </div>
-
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </button>
         </div>
       </header>
 
-      {/* ================= MAIN ================= */}
+      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:py-10">
 
-      <main className="mx-auto max-w-7xl px-5 py-8 sm:px-6">
-
-        {/* ================= INTRO ================= */}
-
-        <div className="mb-8">
-
-          <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+        {/* Page heading */}
+        <div className="mb-8 max-w-3xl">
+          <div className="mb-3 inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
             Resume Builder
-          </span>
-
-          <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Create your professional resume
-          </h2>
-
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            Add your information below. Your resume
-            preview will update automatically as you make
-            changes.
-          </p>
-
-        </div>
-
-        {/* ================= TWO COLUMN LAYOUT ================= */}
-
-        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_520px]">
-
-          {/* ================= LEFT FORM ================= */}
-
-          <div className="min-w-0 space-y-5">
-
-            {/* 01 PERSONAL INFORMATION */}
-
-            <SectionBox
-              number="01"
-              title="Personal Information"
-              description="Add your contact and professional details."
-            >
-              <PersonalInfoForm
-                data={personalInfo}
-                onChange={setPersonalInfo}
-              />
-            </SectionBox>
-
-            {/* 02 PROFESSIONAL SUMMARY */}
-
-            <SectionBox
-              number="02"
-              title="Professional Summary"
-              description="Write a short summary of your professional background."
-            >
-              <SummaryForm
-                value={summary}
-                onChange={setSummary}
-              />
-            </SectionBox>
-
-            {/* 03 SKILLS */}
-
-            <SectionBox
-              number="03"
-              title="Skills"
-              description="Add your technical, soft, and other relevant skills."
-            >
-              <SkillsForm
-                skills={skills}
-                onChange={setSkills}
-              />
-            </SectionBox>
-
-            {/* 04 EDUCATION */}
-
-            <SectionBox
-              number="04"
-              title="Education"
-              description="Add your academic qualifications."
-            >
-              <EducationForm
-                education={education}
-                onChange={setEducation}
-              />
-            </SectionBox>
-
-            {/* 05 PROJECTS */}
-
-            <SectionBox
-              number="05"
-              title="Projects"
-              description="Showcase projects that demonstrate your skills."
-            >
-              <ProjectsForm
-                projects={projects}
-                onChange={setProjects}
-              />
-            </SectionBox>
-
-            {/* 06 CERTIFICATIONS */}
-
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-
-              <SectionHeader
-                number="06"
-                title="Certifications"
-                description="Add professional certifications and credentials."
-                onAdd={() =>
-                  setShowCertificationForm(
-                    (current) => !current
-                  )
-                }
-                addLabel={
-                  showCertificationForm
-                    ? "Close"
-                    : "Add Certification"
-                }
-              />
-
-              {certifications.length > 0 && (
-                <div className="px-5 pt-5">
-
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-
-                    <p className="text-xs font-medium text-slate-600">
-                      {certifications.length} certification
-                      {certifications.length !== 1
-                        ? "s"
-                        : ""}{" "}
-                      added
-                    </p>
-
-                  </div>
-
-                </div>
-              )}
-
-              {showCertificationForm && (
-                <div className="p-5">
-
-                  <CertificationForm
-                    certifications={certifications}
-                    onChange={setCertifications}
-                  />
-
-                </div>
-              )}
-
-            </section>
-
-            {/* 07 INTERNSHIPS */}
-
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-
-              <SectionHeader
-                number="07"
-                title="Internships"
-                description="Add internship experience and technologies used."
-                onAdd={() =>
-                  setShowInternshipForm(
-                    (current) => !current
-                  )
-                }
-                addLabel={
-                  showInternshipForm
-                    ? "Close"
-                    : "Add Internship"
-                }
-              />
-
-              {internships.length > 0 && (
-                <div className="px-5 pt-5">
-
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-
-                    <p className="text-xs font-medium text-slate-600">
-                      {internships.length} internship
-                      {internships.length !== 1
-                        ? "s"
-                        : ""}{" "}
-                      added
-                    </p>
-
-                  </div>
-
-                </div>
-              )}
-
-              {showInternshipForm && (
-                <div className="p-5">
-
-                  <InternshipForm
-                    internships={internships}
-                    onChange={setInternships}
-                  />
-
-                </div>
-              )}
-
-            </section>
-
-            {/* 08 EXPERIENCE */}
-
-            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-
-              <SectionHeader
-                number="08"
-                title="Experience"
-                description="Add your professional work experience."
-                onAdd={() =>
-                  setShowExperienceForm(
-                    (current) => !current
-                  )
-                }
-                addLabel={
-                  showExperienceForm
-                    ? "Close"
-                    : "Add Experience"
-                }
-              />
-
-              {experiences.length > 0 && (
-                <div className="px-5 pt-5">
-
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-
-                    <p className="text-xs font-medium text-slate-600">
-                      {experiences.length} experience
-                      {experiences.length !== 1
-                        ? "s"
-                        : ""}{" "}
-                      added
-                    </p>
-
-                  </div>
-
-                </div>
-              )}
-
-              {showExperienceForm && (
-                <div className="p-5">
-
-                  <ExperienceForm
-                    experiences={experiences}
-                    onChange={setExperiences}
-                  />
-
-                </div>
-              )}
-
-            </section>
-
-            {/* ================= SUCCESS ================= */}
-
-            {successMessage && (
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-
-                <CheckCircle2 size={18} />
-
-                <span>{successMessage}</span>
-
-              </div>
-            )}
-
-            {/* ================= ERROR ================= */}
-
-            {errorMessage && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-                {errorMessage}
-              </div>
-            )}
-
-            {/* ================= SAVE ================= */}
-
-            <div className="flex justify-end pt-2">
-
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={loading}
-                className="inline-flex min-w-[170px] items-center justify-center gap-2 rounded-lg bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-
-                {loading ? (
-                  <>
-                    <Loader2
-                      size={17}
-                      className="animate-spin"
-                    />
-
-                    Saving...
-                  </>
-                ) : (
-                  "Save Resume"
-                )}
-
-              </button>
-
-            </div>
-
           </div>
 
-          {/* ================= RIGHT COLUMN SPACER ================= */}
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+            Build your professional resume
+          </h1>
 
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
+            Add your information step by step. Your resume
+            preview updates automatically as you enter your
+            details.
+          </p>
+        </div>
+
+        {/* Builder layout */}
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_520px]">
+
+          {/* Left side */}
+          <div className="min-w-0 space-y-5 pb-10">
+
+            {/* 01 Personal Information */}
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <SectionHeader
+                number="01"
+                title="Personal Information"
+                description="Add the contact details that should appear on your resume."
+              />
+
+              <div className="p-5">
+                <PersonalInfoForm
+                  data={personalInfo}
+                  onChange={setPersonalInfo}
+                />
+              </div>
+            </section>
+
+            {/* 02 Professional Summary */}
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <SectionHeader
+                number="02"
+                title="Professional Summary"
+                description="Write a short summary that highlights your background and career direction."
+              />
+
+              <div className="p-5">
+                <SummaryForm
+                  value={professionalSummary}
+                  onChange={setProfessionalSummary}
+                />
+              </div>
+            </section>
+
+            {/* 03 Skills */}
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <SectionHeader
+                number="03"
+                title="Skills"
+                description="Add technical, soft, and other relevant skills."
+              />
+
+              <div className="p-5">
+                <SkillsForm
+                  skills={skills}
+                  onChange={setSkills}
+                />
+              </div>
+            </section>
+
+            {/* 04 Education */}
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <SectionHeader
+                number="04"
+                title="Education"
+                description="Add your academic qualifications."
+              />
+
+              <div className="p-5">
+                <EducationForm
+                  education={education}
+                  onChange={setEducation}
+                />
+              </div>
+            </section>
+
+            {/* 05 Projects */}
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <SectionHeader
+                number="05"
+                title="Projects"
+                description="Showcase projects that demonstrate your skills and experience."
+              />
+
+              <div className="p-5">
+                <ProjectsForm
+                  projects={projects}
+                  onChange={setProjects}
+                />
+              </div>
+            </section>
+
+            {/* 06 Certifications */}
+            {showCertificationSection ? (
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <SectionHeader
+                  number="06"
+                  title="Certifications"
+                  description="Add relevant certifications and credentials."
+                  action={
+                    <SectionAction
+                      danger
+                      onClick={removeCertificationSection}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Remove
+                    </SectionAction>
+                  }
+                />
+
+                <div className="p-5">
+                  {showCertificationForm ? (
+                    <CertificationForm
+                      certifications={certifications}
+                      onChange={setCertifications}
+                      onDraftChange={
+                        handleCertificationDraftChange
+                      }
+                    />
+                  ) : certifications.length > 0 ? (
+                    <div className="space-y-3">
+                      {certifications.map(
+                        (certification, index) => (
+                          <div
+                            key={`${certification.name}-${index}`}
+                            className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                          >
+                            <p className="text-sm font-semibold text-slate-900">
+                              {certification.name}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-600">
+                              {
+                                certification.issuing_organization
+                              }
+                            </p>
+
+                            {certification.issue_date && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                Issued:{" "}
+                                {certification.issue_date}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
+                      <p className="text-sm font-medium text-slate-700">
+                        No certifications added yet
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError("");
+                          setShowCertificationForm(true);
+                          setCertificationDraft(
+                            emptyCertification()
+                          );
+                        }}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add Certification
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
+            ) : (
+              <section className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Certifications
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      This section is currently removed from your resume.
+                    </p>
+                  </div>
+
+                  <SectionAction
+                    onClick={enableCertificationSection}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Certification
+                  </SectionAction>
+                </div>
+              </section>
+            )}
+
+            {/* 07 Internships */}
+            {showInternshipSection ? (
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <SectionHeader
+                  number="07"
+                  title="Internships"
+                  description="Add internships, training experience, and technologies."
+                  action={
+                    <SectionAction
+                      danger
+                      onClick={removeInternshipSection}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Remove
+                    </SectionAction>
+                  }
+                />
+
+                <div className="p-5">
+                  {showInternshipForm ? (
+                    <InternshipForm
+                      internships={internships}
+                      onChange={setInternships}
+                      onDraftChange={
+                        handleInternshipDraftChange
+                      }
+                    />
+                  ) : internships.length > 0 ? (
+                    <div className="space-y-3">
+                      {internships.map(
+                        (internship, index) => (
+                          <div
+                            key={`${internship.company}-${index}`}
+                            className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                          >
+                            <p className="text-sm font-semibold text-slate-900">
+                              {internship.internship_title}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-600">
+                              {internship.company}
+                              {internship.location
+                                ? ` • ${internship.location}`
+                                : ""}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              {internship.start_date}
+                              {" — "}
+                              {internship.currently_working
+                                ? "Present"
+                                : internship.end_date || ""}
+                            </p>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
+                      <p className="text-sm font-medium text-slate-700">
+                        No internships added yet
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError("");
+                          setShowInternshipForm(true);
+                          setInternshipDraft(
+                            emptyInternship()
+                          );
+                        }}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add Internship
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
+            ) : (
+              <section className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Internships
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      This section is currently removed from your resume.
+                    </p>
+                  </div>
+
+                  <SectionAction
+                    onClick={enableInternshipSection}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Internship
+                  </SectionAction>
+                </div>
+              </section>
+            )}
+
+            {/* 08 Experience */}
+            {showExperienceSection ? (
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <SectionHeader
+                  number="08"
+                  title="Experience"
+                  description="Add your professional work experience."
+                  action={
+                    <SectionAction
+                      danger
+                      onClick={removeExperienceSection}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Remove
+                    </SectionAction>
+                  }
+                />
+
+                <div className="p-5">
+                  {showExperienceForm ? (
+                    <ExperienceForm
+                      experiences={experiences}
+                      onChange={setExperiences}
+                    />
+                  ) : experiences.length > 0 ? (
+                    <div className="space-y-3">
+                      {experiences.map(
+                        (experience, index) => (
+                          <div
+                            key={`${experience.company}-${index}`}
+                            className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                          >
+                            <p className="text-sm font-semibold text-slate-900">
+                              {experience.job_title}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-600">
+                              {experience.company}
+                              {experience.location
+                                ? ` • ${experience.location}`
+                                : ""}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              {experience.start_date}
+                              {" — "}
+                              {experience.currently_working
+                                ? "Present"
+                                : experience.end_date || ""}
+                            </p>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
+                      <p className="text-sm font-medium text-slate-700">
+                        No experience added yet
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={enableExperienceSection}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add Experience
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </section>
+            ) : (
+              <section className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Experience
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      This section is currently removed from your resume.
+                    </p>
+                  </div>
+
+                  <SectionAction
+                    onClick={enableExperienceSection}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Experience
+                  </SectionAction>
+                </div>
+              </section>
+            )}
+
+            {/* 09 Resume Template */}
+            <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+              <SectionHeader
+                number="09"
+                title="Resume Template"
+                description="Choose a resume design that matches your style."
+              />
+
+              <div className="p-5">
+                <TemplateSelector
+                  selectedTemplate={selectedTemplate}
+                  onChange={setSelectedTemplate}
+                />
+              </div>
+            </section>
+
+            {/* Download / Save */}
+            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900">
+                    Finish your resume
+                  </h2>
+
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    Download your resume as an editable Word document
+                    or PDF, or save the resume data.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <DownloadButton
+                    onClick={handleDownloadWord}
+                    loading={downloadingWord}
+                    icon={
+                      <FileText className="h-4 w-4" />
+                    }
+                  >
+                    Download Word
+                  </DownloadButton>
+
+                  <DownloadButton
+                    onClick={handleDownloadPdf}
+                    loading={downloadingPdf}
+                    icon={
+                      <Download className="h-4 w-4" />
+                    }
+                  >
+                    Download PDF
+                  </DownloadButton>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveResume}
+                    disabled={saving}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : saveSuccess ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : null}
+
+                    {saving
+                      ? "Saving..."
+                      : saveSuccess
+                        ? "Saved"
+                        : "Save Resume"}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
+              {saveSuccess && !error && (
+                <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  Resume data saved successfully.
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* Preview spacer */}
           <div
             className="hidden xl:block"
             aria-hidden="true"
           />
-
         </div>
-
-        {/* ==================================================
-            SINGLE FIXED RESUME PREVIEW
-        ================================================== */}
-
-        <div
-          className="pointer-events-none fixed z-40 hidden xl:block"
-          style={{
-            top: "88px",
-            right:
-              "max(24px, calc((100vw - 1280px) / 2))",
-            width: "520px",
-            maxHeight: "calc(100vh - 112px)",
-            overflowY: "auto",
-            overflowX: "hidden",
-          }}
-        >
-          <div className="pointer-events-auto">
-            <ResumePreview
-              resumeData={resumeData}
-            />
-          </div>
-        </div>
-
       </main>
 
+      {/* Fixed Resume Preview */}
+      <div
+        className="pointer-events-none fixed z-40 hidden xl:block"
+        style={{
+          top: "88px",
+          right:
+            "max(24px, calc((100vw - 1280px) / 2))",
+          width: "520px",
+          maxHeight: "calc(100vh - 112px)",
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}
+      >
+        <div className="pointer-events-auto">
+          <ResumePreview
+            resumeData={resumeData}
+            template={selectedTemplate}
+          />
+        </div>
+      </div>
     </div>
   );
 }
-
-export default ResumeBuilder;

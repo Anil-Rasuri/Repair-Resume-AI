@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
 import type { Certification } from "../../types/resume";
@@ -6,6 +6,7 @@ import type { Certification } from "../../types/resume";
 interface CertificationFormProps {
   certifications: Certification[];
   onChange: (certifications: Certification[]) => void;
+  onDraftChange?: (draft: Certification | null) => void;
 }
 
 const months = [
@@ -26,6 +27,7 @@ const months = [
 function CertificationForm({
   certifications,
   onChange,
+  onDraftChange,
 }: CertificationFormProps) {
   const currentYear = new Date().getFullYear();
 
@@ -35,13 +37,40 @@ function CertificationForm({
   );
 
   const [name, setName] = useState("");
-  const [issuingOrganization, setIssuingOrganization] = useState("");
+  const [issuingOrganization, setIssuingOrganization] =
+    useState("");
 
   const [issueMonth, setIssueMonth] = useState("");
   const [issueYear, setIssueYear] = useState("");
 
   const [credentialId, setCredentialId] = useState("");
   const [credentialUrl, setCredentialUrl] = useState("");
+
+  /*
+   * Keep the current certification visible in the live preview.
+   * It becomes a saved certification only when the user clicks
+   * "Add Certification".
+   */
+  useEffect(() => {
+    onDraftChange?.({
+      name,
+      issuing_organization: issuingOrganization,
+      issue_date:
+        issueYear && issueMonth
+          ? `${issueYear}-${issueMonth}`
+          : "",
+      credential_id: credentialId.trim() || undefined,
+      credential_url: credentialUrl.trim() || undefined,
+    });
+  }, [
+    name,
+    issuingOrganization,
+    issueMonth,
+    issueYear,
+    credentialId,
+    credentialUrl,
+    onDraftChange,
+  ]);
 
   const addCertification = () => {
     if (
@@ -55,33 +84,42 @@ function CertificationForm({
 
     const newCertification: Certification = {
       name: name.trim(),
-      issuing_organization: issuingOrganization.trim(),
+      issuing_organization:
+        issuingOrganization.trim(),
       issue_date: `${issueYear}-${issueMonth}`,
-      credential_id: credentialId.trim() || undefined,
-      credential_url: credentialUrl.trim() || undefined,
+      credential_id:
+        credentialId.trim() || undefined,
+      credential_url:
+        credentialUrl.trim() || undefined,
     };
 
-    onChange([...certifications, newCertification]);
+    onChange([
+      ...certifications,
+      newCertification,
+    ]);
 
     setName("");
     setIssuingOrganization("");
-
     setIssueMonth("");
     setIssueYear("");
-
     setCredentialId("");
     setCredentialUrl("");
   };
 
   const removeCertification = (index: number) => {
     onChange(
-      certifications.filter((_, certificationIndex) => {
-        return certificationIndex !== index;
-      })
+      certifications.filter(
+        (_, certificationIndex) =>
+          certificationIndex !== index
+      )
     );
   };
 
   const formatDate = (date: string) => {
+    if (!date) {
+      return "";
+    }
+
     const [year, month] = date.split("-");
 
     const monthName = months.find(
@@ -99,49 +137,62 @@ function CertificationForm({
         </h2>
 
         <p className="mt-1 text-xs text-slate-500">
-          Add professional certifications, courses, or credentials.
+          Add professional certifications and credentials.
         </p>
       </div>
 
       {certifications.length > 0 && (
         <div className="mb-5 space-y-3">
-          {certifications.map((certification, index) => (
-            <div
-              key={index}
-              className="rounded-lg border border-slate-200 bg-slate-50 p-4"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-900">
-                    {certification.name}
-                  </h3>
+          {certifications.map(
+            (certification, index) => (
+              <div
+                key={index}
+                className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      {certification.name}
+                    </h3>
 
-                  <p className="mt-1 text-xs text-slate-600">
-                    {certification.issuing_organization}
-                  </p>
-
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    Issued: {formatDate(certification.issue_date)}
-                  </p>
-
-                  {certification.credential_id && (
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Credential ID: {certification.credential_id}
+                    <p className="mt-1 text-xs text-slate-600">
+                      {certification.issuing_organization}
                     </p>
-                  )}
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => removeCertification(index)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-red-50 hover:text-red-500"
-                  aria-label="Remove certification"
-                >
-                  <Trash2 size={15} />
-                </button>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {formatDate(
+                        certification.issue_date
+                      )}
+                    </p>
+
+                    {certification.credential_id && (
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Credential ID:{" "}
+                        {certification.credential_id}
+                      </p>
+                    )}
+
+                    {certification.credential_url && (
+                      <p className="mt-1 truncate text-[11px] text-blue-600">
+                        {certification.credential_url}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      removeCertification(index)
+                    }
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                    aria-label="Remove certification"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          )}
         </div>
       )}
 
@@ -154,7 +205,9 @@ function CertificationForm({
           <input
             type="text"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) =>
+              setName(event.target.value)
+            }
             placeholder="e.g. AWS Certified Cloud Practitioner"
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
@@ -169,7 +222,9 @@ function CertificationForm({
             type="text"
             value={issuingOrganization}
             onChange={(event) =>
-              setIssuingOrganization(event.target.value)
+              setIssuingOrganization(
+                event.target.value
+              )
             }
             placeholder="e.g. Amazon Web Services"
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -183,13 +238,18 @@ function CertificationForm({
 
           <select
             value={issueMonth}
-            onChange={(event) => setIssueMonth(event.target.value)}
+            onChange={(event) =>
+              setIssueMonth(event.target.value)
+            }
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
             <option value="">Select month</option>
 
             {months.map((month) => (
-              <option key={month.value} value={month.value}>
+              <option
+                key={month.value}
+                value={month.value}
+              >
                 {month.label}
               </option>
             ))}
@@ -203,13 +263,18 @@ function CertificationForm({
 
           <select
             value={issueYear}
-            onChange={(event) => setIssueYear(event.target.value)}
+            onChange={(event) =>
+              setIssueYear(event.target.value)
+            }
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
             <option value="">Select year</option>
 
             {years.map((year) => (
-              <option key={year} value={String(year)}>
+              <option
+                key={year}
+                value={String(year)}
+              >
                 {year}
               </option>
             ))}
@@ -224,7 +289,9 @@ function CertificationForm({
           <input
             type="text"
             value={credentialId}
-            onChange={(event) => setCredentialId(event.target.value)}
+            onChange={(event) =>
+              setCredentialId(event.target.value)
+            }
             placeholder="Optional"
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
@@ -238,7 +305,9 @@ function CertificationForm({
           <input
             type="url"
             value={credentialUrl}
-            onChange={(event) => setCredentialUrl(event.target.value)}
+            onChange={(event) =>
+              setCredentialUrl(event.target.value)
+            }
             placeholder="https://..."
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />

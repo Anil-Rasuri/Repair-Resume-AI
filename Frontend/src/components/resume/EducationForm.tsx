@@ -12,7 +12,10 @@ interface YearPickerProps {
   onChange: (value: string) => void;
 }
 
-const YearPicker: React.FC<YearPickerProps> = ({ value, onChange }) => {
+const YearPicker: React.FC<YearPickerProps> = ({
+  value,
+  onChange,
+}) => {
   const [open, setOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -27,27 +30,46 @@ const YearPicker: React.FC<YearPickerProps> = ({ value, onChange }) => {
     const handleOutsideClick = (event: MouseEvent) => {
       if (
         pickerRef.current &&
-        !pickerRef.current.contains(event.target as Node)
+        !pickerRef.current.contains(
+          event.target as Node
+        )
       ) {
         setOpen(false);
       }
     };
 
-    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick
+    );
 
     return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick
+      );
     };
   }, []);
 
   return (
-    <div ref={pickerRef} className="relative w-[130px]">
+    <div
+      ref={pickerRef}
+      className="relative w-[130px]"
+    >
       <button
         type="button"
-        onClick={() => setOpen((previous) => !previous)}
+        onClick={() =>
+          setOpen((previous) => !previous)
+        }
         className="flex h-10 w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none transition hover:border-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
       >
-        <span className={value ? "text-slate-700" : "text-slate-400"}>
+        <span
+          className={
+            value
+              ? "text-slate-700"
+              : "text-slate-400"
+          }
+        >
           {value || "Year"}
         </span>
 
@@ -95,6 +117,7 @@ const EducationForm: React.FC<EducationFormProps> = ({
       ...education,
       {
         degree: "",
+        branch: "",
         institution: "",
         location: "",
         start_date: "",
@@ -105,7 +128,9 @@ const EducationForm: React.FC<EducationFormProps> = ({
   };
 
   const removeEducation = (index: number) => {
-    onChange(education.filter((_, i) => i !== index));
+    onChange(
+      education.filter((_, i) => i !== index)
+    );
   };
 
   const updateEducation = (
@@ -113,13 +138,14 @@ const EducationForm: React.FC<EducationFormProps> = ({
     field: keyof Education,
     value: string
   ) => {
-    const updated = education.map((item, i) =>
-      i === index
-        ? {
-            ...item,
-            [field]: value,
-          }
-        : item
+    const updated = education.map(
+      (item, i) =>
+        i === index
+          ? {
+              ...item,
+              [field]: value,
+            }
+          : item
     );
 
     onChange(updated);
@@ -140,7 +166,9 @@ const EducationForm: React.FC<EducationFormProps> = ({
             {education.length > 1 && (
               <button
                 type="button"
-                onClick={() => removeEducation(index)}
+                onClick={() =>
+                  removeEducation(index)
+                }
                 className="text-sm font-medium text-red-500 transition hover:text-red-600"
               >
                 Remove
@@ -149,6 +177,7 @@ const EducationForm: React.FC<EducationFormProps> = ({
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
             {/* Degree */}
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">
@@ -159,9 +188,34 @@ const EducationForm: React.FC<EducationFormProps> = ({
                 type="text"
                 value={item.degree}
                 onChange={(e) =>
-                  updateEducation(index, "degree", e.target.value)
+                  updateEducation(
+                    index,
+                    "degree",
+                    e.target.value
+                  )
                 }
-                placeholder="B.Tech Computer Science"
+                placeholder="B.Tech"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            {/* Branch */}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Branch
+              </label>
+
+              <input
+                type="text"
+                value={item.branch || ""}
+                onChange={(e) =>
+                  updateEducation(
+                    index,
+                    "branch",
+                    e.target.value
+                  )
+                }
+                placeholder="Computer Science and Engineering"
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </div>
@@ -176,7 +230,11 @@ const EducationForm: React.FC<EducationFormProps> = ({
                 type="text"
                 value={item.institution}
                 onChange={(e) =>
-                  updateEducation(index, "institution", e.target.value)
+                  updateEducation(
+                    index,
+                    "institution",
+                    e.target.value
+                  )
                 }
                 placeholder="University / College Name"
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -193,7 +251,11 @@ const EducationForm: React.FC<EducationFormProps> = ({
                 type="text"
                 value={item.location || ""}
                 onChange={(e) =>
-                  updateEducation(index, "location", e.target.value)
+                  updateEducation(
+                    index,
+                    "location",
+                    e.target.value
+                  )
                 }
                 placeholder="Hyderabad, India"
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -209,7 +271,11 @@ const EducationForm: React.FC<EducationFormProps> = ({
               <YearPicker
                 value={item.start_date}
                 onChange={(value) =>
-                  updateEducation(index, "start_date", value)
+                  updateEducation(
+                    index,
+                    "start_date",
+                    value
+                  )
                 }
               />
             </div>
@@ -223,7 +289,11 @@ const EducationForm: React.FC<EducationFormProps> = ({
               <YearPicker
                 value={item.end_date}
                 onChange={(value) =>
-                  updateEducation(index, "end_date", value)
+                  updateEducation(
+                    index,
+                    "end_date",
+                    value
+                  )
                 }
               />
             </div>
@@ -238,7 +308,11 @@ const EducationForm: React.FC<EducationFormProps> = ({
             <textarea
               value={item.description || ""}
               onChange={(e) =>
-                updateEducation(index, "description", e.target.value)
+                updateEducation(
+                  index,
+                  "description",
+                  e.target.value
+                )
               }
               placeholder="Add relevant education details, achievements, coursework, etc."
               rows={4}
