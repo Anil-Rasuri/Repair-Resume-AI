@@ -1,1741 +1,2108 @@
-import type { ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+
+import {
+  Award,
+  BriefcaseBusiness,
+  ExternalLink,
+  GraduationCap,
+  Layers3,
+  Mail,
+  MapPin,
+  Phone,
+  UserCircle,
+  Wrench,
+} from "lucide-react";
 
 import type { ResumeData } from "../../types/resume";
-import type { ResumeTemplate } from "../../templates/templateTypes";
 
 interface ResumePreviewProps {
   resumeData: ResumeData;
-  template: ResumeTemplate;
+  template: string;
 }
 
-function formatDate(date: string): string {
-  if (!date) {
-    return "";
-  }
+/* =========================================================
+   A4
+========================================================= */
 
-  const parts = date.split("-");
+const PAGE_WIDTH = 794;
+const PAGE_HEIGHT = 1123;
 
-  if (parts.length === 2) {
-    const year = Number(parts[0]);
-    const month = Number(parts[1]);
+/* =========================================================
+   HELPERS
+========================================================= */
 
-    if (!Number.isNaN(year) && month >= 1 && month <= 12) {
-      return new Date(year, month - 1).toLocaleDateString(
-        "en-US",
-        {
-          month: "short",
-          year: "numeric",
-        }
-      );
-    }
-  }
+const formatDate = (date?: string) => {
+  if (!date) return "";
 
-  return date;
-}
+  const [year, month] = date.split("-");
 
-function getDateRange(
-  startDate: string,
-  endDate: string | undefined,
-  currentlyWorking: boolean
-): string {
-  const start = formatDate(startDate);
+  if (!month) return year;
 
-  if (currentlyWorking) {
-    return start ? `${start} – Present` : "Present";
-  }
+  const months: Record<string, string> = {
+    "01": "Jan",
+    "02": "Feb",
+    "03": "Mar",
+    "04": "Apr",
+    "05": "May",
+    "06": "Jun",
+    "07": "Jul",
+    "08": "Aug",
+    "09": "Sep",
+    "10": "Oct",
+    "11": "Nov",
+    "12": "Dec",
+  };
 
-  const end = formatDate(endDate ?? "");
+  return `${months[month] || month} ${year}`;
+};
 
-  if (start && end) {
-    return `${start} – ${end}`;
-  }
+const cleanUrl = (url?: string) => {
+  if (!url) return "";
 
-  return start || end;
-}
+  return url
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/$/, "");
+};
+
+const hasText = (value?: string) => Boolean(value?.trim());
+
+const normalizeTemplate = (template: string) => {
+  const value = template.toLowerCase().trim();
+
+  if (value.includes("modern blue")) return "modern-blue";
+  if (value.includes("executive")) return "executive";
+  if (value.includes("creative")) return "creative-blue";
+  if (value.includes("professional split")) return "professional-split";
+  if (value.includes("modern header")) return "modern-header";
+  if (value.includes("minimal")) return "minimal";
+  if (value.includes("tech")) return "tech";
+
+  return "classic";
+};
+
+/* =========================================================
+   SHARED COMPONENTS
+========================================================= */
 
 function SectionTitle({
-  children,
-  className = "",
+  title,
+  icon,
+  color = "#2563EB",
+  line = true,
 }: {
-  children: ReactNode;
-  className?: string;
+  title: string;
+  icon?: ReactNode;
+  color?: string;
+  line?: boolean;
 }) {
-  return (
-    <h2
-      className={`mb-2 border-b border-slate-200 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-800 ${className}`}
-    >
-      {children}
-    </h2>
-  );
-}
-
-function ContactInfo({
-  resumeData,
-  className = "",
-}: {
-  resumeData: ResumeData;
-  className?: string;
-}) {
-  const personal = resumeData.personal_info;
-
-  const items = [
-    personal.email,
-    personal.phone,
-    personal.location,
-    personal.linkedin,
-    personal.github,
-    personal.portfolio,
-  ].filter((item) => item?.trim());
-
-  if (items.length === 0) {
-    return null;
-  }
-
   return (
     <div
-      className={`flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[8px] leading-tight text-slate-600 ${className}`}
+      className={`mb-3 flex items-center gap-2 ${
+        line ? "border-b border-slate-200 pb-1.5" : ""
+      }`}
     >
-      {items.map((item, index) => (
-        <span
-          key={`${item}-${index}`}
-          className="break-all"
-        >
-          {item}
-
-          {index < items.length - 1 ? (
-            <span className="ml-2 text-slate-300">
-              |
-            </span>
-          ) : null}
+      {icon && (
+        <span style={{ color }} className="flex shrink-0">
+          {icon}
         </span>
-      ))}
+      )}
+
+      <h2
+        className="text-[12px] font-bold uppercase tracking-[0.12em]"
+        style={{ color: "#172033" }}
+      >
+        {title}
+      </h2>
     </div>
   );
 }
 
-function SummaryContent({
-  resumeData,
-  className = "",
+function ContactItem({
+  icon,
+  children,
 }: {
-  resumeData: ResumeData;
-  className?: string;
+  icon: ReactNode;
+  children: ReactNode;
 }) {
-  if (!resumeData.professional_summary?.trim()) {
-    return null;
-  }
-
   return (
-    <p
-      className={`text-[8.5px] leading-[1.45] text-slate-700 ${className}`}
-    >
-      {resumeData.professional_summary.trim()}
-    </p>
+    <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+      <span className="shrink-0 text-[#2563EB]">{icon}</span>
+      <span>{children}</span>
+    </span>
   );
 }
 
-function SkillsContent({
-  resumeData,
-  compact = false,
+function SkillList({
+  skills,
+  chip = false,
 }: {
-  resumeData: ResumeData;
-  compact?: boolean;
+  skills: string[];
+  chip?: boolean;
 }) {
-  const technical = resumeData.skills.technical.filter(Boolean);
-  const soft = resumeData.skills.soft.filter(Boolean);
-  const other = resumeData.skills.other.filter(Boolean);
+  if (!skills.length) return null;
 
-  if (
-    technical.length === 0 &&
-    soft.length === 0 &&
-    other.length === 0
-  ) {
-    return null;
-  }
-
-  const groups = [
-    {
-      label: "Technical",
-      values: technical,
-    },
-    {
-      label: "Soft Skills",
-      values: soft,
-    },
-    {
-      label: "Other",
-      values: other,
-    },
-  ].filter((group) => group.values.length > 0);
-
-  if (compact) {
+  if (chip) {
     return (
-      <div className="space-y-2">
-        {groups.map((group) => (
-          <div key={group.label}>
-            <p className="mb-1 text-[7px] font-bold uppercase tracking-wide text-slate-400">
-              {group.label}
-            </p>
-
-            <div className="flex flex-wrap gap-1">
-              {group.values.map((skill) => (
-                <span
-                  key={skill}
-                  className="rounded border border-slate-300 px-1.5 py-0.5 text-[7px] leading-none text-slate-700"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
+      <div className="flex flex-wrap gap-1.5">
+        {skills.map((skill, index) => (
+          <span
+            key={`${skill}-${index}`}
+            className="rounded bg-[#EAF2FF] px-2 py-1 text-[9px] font-medium leading-none text-[#2457A6]"
+          >
+            {skill}
+          </span>
         ))}
       </div>
     );
   }
 
   return (
-    <div className="space-y-1.5 text-[8px] leading-[1.35] text-slate-700">
-      {groups.map((group) => (
-        <p key={group.label}>
-          <span className="font-semibold">
-            {group.label}:
-          </span>{" "}
-          {group.values.join(", ")}
+    <div className="space-y-1">
+      {skills.map((skill, index) => (
+        <p
+          key={`${skill}-${index}`}
+          className="text-[10px] leading-[1.4] text-slate-600"
+        >
+          • {skill}
         </p>
       ))}
     </div>
   );
 }
 
-function EducationContent({
-  resumeData,
+/* =========================================================
+   EXPERIENCE
+========================================================= */
+
+function ExperienceBlock({
+  item,
   compact = false,
 }: {
-  resumeData: ResumeData;
+  item: ResumeData["experience"][number];
   compact?: boolean;
 }) {
-  if (resumeData.education.length === 0) {
-    return null;
-  }
-
   return (
-    <div className="space-y-2.5">
-      {resumeData.education.map((education, index) => (
-        <div
-          key={`${education.degree}-${index}`}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              {/* Degree */}
-              <p
-                className={`font-bold text-slate-800 ${
-                  compact
-                    ? "text-[7.5px]"
-                    : "text-[8.5px]"
-                }`}
-              >
-                {education.degree}
-              </p>
+    <div className={compact ? "mb-4" : "mb-5"}>
+      <div className="flex items-start justify-between gap-5">
+        <div className="min-w-0">
+          <h3 className="text-[11.5px] font-bold leading-[1.3] text-[#172033]">
+            {item.job_title || "Job Title"}
+          </h3>
 
-              {/* Branch */}
-              {education.branch?.trim() && (
-                <p
-                  className={`text-slate-600 ${
-                    compact
-                      ? "text-[7px]"
-                      : "text-[8px]"
-                  }`}
-                >
-                  {education.branch.trim()}
-                </p>
-              )}
-
-              {/* Institution + Location */}
-              <p
-                className={`text-slate-600 ${
-                  compact
-                    ? "text-[7px]"
-                    : "text-[8px]"
-                }`}
-              >
-                {education.institution}
-
-                {education.location
-                  ? `, ${education.location}`
-                  : ""}
-              </p>
-            </div>
-
-            {/* Education Dates */}
-            {(education.start_date ||
-              education.end_date) && (
-              <p
-                className={`shrink-0 text-right italic text-slate-500 ${
-                  compact
-                    ? "text-[6.5px]"
-                    : "text-[7px]"
-                }`}
-              >
-                {formatDate(education.start_date)}
-
-                {education.start_date &&
-                education.end_date
-                  ? " – "
-                  : ""}
-
-                {formatDate(education.end_date)}
-              </p>
-            )}
-          </div>
-
-          {/* Description */}
-          {education.description?.trim() && (
-            <p
-              className={`mt-1 leading-[1.35] text-slate-600 ${
-                compact
-                  ? "text-[7px]"
-                  : "text-[7.5px]"
-              }`}
-            >
-              {education.description.trim()}
-            </p>
-          )}
+          <p className="mt-0.5 text-[10px] font-semibold leading-[1.35] text-[#2563EB]">
+            {item.company || "Company"}
+            {item.location ? ` • ${item.location}` : ""}
+          </p>
         </div>
-      ))}
+
+        {(item.start_date ||
+          item.end_date ||
+          item.currently_working) && (
+          <span className="shrink-0 whitespace-nowrap text-[9px] font-medium text-slate-500">
+            {formatDate(item.start_date)}
+            {item.start_date &&
+            (item.end_date || item.currently_working)
+              ? " – "
+              : ""}
+            {item.currently_working
+              ? "Present"
+              : formatDate(item.end_date)}
+          </span>
+        )}
+      </div>
+
+      {hasText(item.description) && (
+        <p className="mt-1.5 whitespace-pre-line text-[10px] leading-[1.48] text-slate-600">
+          {item.description}
+        </p>
+      )}
     </div>
   );
 }
 
-function ProjectsContent({
-  resumeData,
-  compact = false,
-  boxed = false,
+/* =========================================================
+   INTERNSHIP
+========================================================= */
+
+function InternshipBlock({
+  item,
 }: {
-  resumeData: ResumeData;
-  compact?: boolean;
-  boxed?: boolean;
+  item: ResumeData["internships"][number];
 }) {
-  if (resumeData.projects.length === 0) {
-    return null;
-  }
-
   return (
-    <div className="space-y-2.5">
-      {resumeData.projects.map((project, index) => (
-        <div
-          key={`${project.name}-${index}`}
-          className={
-            boxed
-              ? "rounded border border-slate-600 bg-slate-900/50 p-2"
-              : ""
-          }
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-            <p
-              className={`font-bold ${
-                compact
-                  ? "text-[7.5px]"
-                  : "text-[8.5px]"
-              } ${
-                boxed
-                  ? "text-slate-100"
-                  : "text-slate-800"
-              }`}
-            >
-              {project.name}
-            </p>
+    <div className="mb-5">
+      <div className="flex items-start justify-between gap-5">
+        <div className="min-w-0">
+          <h3 className="text-[11.5px] font-bold leading-[1.3] text-[#172033]">
+            {item.internship_title || "Internship"}
+          </h3>
 
-            {project.project_url?.trim() && (
-              <p
-                className={`break-all ${
-                  compact
-                    ? "text-[6.5px]"
-                    : "text-[7px]"
-                } ${
-                  boxed
-                    ? "text-cyan-300"
-                    : "text-blue-600"
-                }`}
-              >
-                {project.project_url.trim()}
-              </p>
-            )}
-          </div>
-
-          {project.technologies.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {project.technologies.map(
-                (technology) => (
-                  <span
-                    key={technology}
-                    className={`rounded px-1.5 py-0.5 text-[6.5px] ${
-                      boxed
-                        ? "border border-slate-600 bg-slate-800 text-cyan-200"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {technology}
-                  </span>
-                )
-              )}
-            </div>
-          )}
-
-          {project.description?.trim() && (
-            <p
-              className={`mt-1.5 leading-[1.4] ${
-                compact
-                  ? "text-[7px]"
-                  : "text-[7.5px]"
-              } ${
-                boxed
-                  ? "text-slate-300"
-                  : "text-slate-600"
-              }`}
-            >
-              {project.description.trim()}
-            </p>
-          )}
+          <p className="mt-0.5 text-[10px] font-semibold text-[#2563EB]">
+            {item.company || "Company"}
+            {item.location ? ` • ${item.location}` : ""}
+          </p>
         </div>
-      ))}
-    </div>
-  );
-}
 
-function CertificationsContent({
-  resumeData,
-  compact = false,
-}: {
-  resumeData: ResumeData;
-  compact?: boolean;
-}) {
-  if (resumeData.certifications.length === 0) {
-    return null;
-  }
+        {(item.start_date ||
+          item.end_date ||
+          item.currently_working) && (
+          <span className="shrink-0 whitespace-nowrap text-[9px] text-slate-500">
+            {formatDate(item.start_date)}
+            {item.start_date &&
+            (item.end_date || item.currently_working)
+              ? " – "
+              : ""}
+            {item.currently_working
+              ? "Present"
+              : formatDate(item.end_date)}
+          </span>
+        )}
+      </div>
 
-  return (
-    <div className="space-y-2">
-      {resumeData.certifications.map(
-        (certification, index) => (
-          <div
-            key={`${certification.name}-${index}`}
-          >
-            <p
-              className={`font-semibold text-slate-800 ${
-                compact
-                  ? "text-[7px]"
-                  : "text-[8px]"
-              }`}
-            >
-              {certification.name}
-            </p>
+      {hasText(item.description) && (
+        <p className="mt-1.5 whitespace-pre-line text-[10px] leading-[1.48] text-slate-600">
+          {item.description}
+        </p>
+      )}
 
-            <p
-              className={`text-slate-600 ${
-                compact
-                  ? "text-[6.5px]"
-                  : "text-[7px]"
-              }`}
-            >
-              {certification.issuing_organization}
-
-              {certification.issue_date
-                ? ` • ${formatDate(
-                    certification.issue_date
-                  )}`
-                : ""}
-            </p>
-
-            {certification.credential_id?.trim() && (
-              <p
-                className={`text-slate-500 ${
-                  compact
-                    ? "text-[6px]"
-                    : "text-[6.5px]"
-                }`}
-              >
-                ID:{" "}
-                {certification.credential_id.trim()}
-              </p>
-            )}
-
-            {certification.credential_url?.trim() && (
-              <p
-                className={`break-all text-blue-600 ${
-                  compact
-                    ? "text-[6px]"
-                    : "text-[6.5px]"
-                }`}
-              >
-                {certification.credential_url.trim()}
-              </p>
-            )}
-          </div>
-        )
+      {item.technologies.length > 0 && (
+        <p className="mt-1.5 text-[9px] leading-[1.4] text-slate-500">
+          <span className="font-semibold text-slate-700">
+            Technologies:
+          </span>{" "}
+          {item.technologies.join(" • ")}
+        </p>
       )}
     </div>
   );
 }
 
-function InternshipsContent({
-  resumeData,
-  compact = false,
+/* =========================================================
+   PROJECT
+========================================================= */
+
+function ProjectBlock({
+  item,
+  style = "normal",
 }: {
-  resumeData: ResumeData;
-  compact?: boolean;
+  item: ResumeData["projects"][number];
+  style?: "normal" | "tech" | "minimal";
 }) {
-  if (resumeData.internships.length === 0) {
-    return null;
-  }
-
   return (
-    <div className="space-y-2.5">
-      {resumeData.internships.map(
-        (internship, index) => (
-          <div
-            key={`${internship.internship_title}-${index}`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p
-                  className={`font-bold text-slate-800 ${
-                    compact
-                      ? "text-[7.5px]"
-                      : "text-[8.5px]"
-                  }`}
-                >
-                  {internship.internship_title}
-                </p>
-
-                <p
-                  className={`text-slate-600 ${
-                    compact
-                      ? "text-[7px]"
-                      : "text-[8px]"
-                  }`}
-                >
-                  {internship.company}
-
-                  {internship.location
-                    ? `, ${internship.location}`
-                    : ""}
-                </p>
-              </div>
-
-              <p
-                className={`shrink-0 text-right italic text-slate-500 ${
-                  compact
-                    ? "text-[6.5px]"
-                    : "text-[7px]"
-                }`}
-              >
-                {getDateRange(
-                  internship.start_date,
-                  internship.end_date,
-                  internship.currently_working
-                )}
-              </p>
-            </div>
-
-            {internship.technologies.length > 0 && (
-              <p
-                className={`mt-0.5 text-slate-500 ${
-                  compact
-                    ? "text-[6.5px]"
-                    : "text-[7px]"
-                }`}
-              >
-                <span className="font-semibold">
-                  Technologies:
-                </span>{" "}
-                {internship.technologies.join(", ")}
-              </p>
-            )}
-
-            {internship.description?.trim() && (
-              <p
-                className={`mt-1 leading-[1.4] text-slate-600 ${
-                  compact
-                    ? "text-[7px]"
-                    : "text-[7.5px]"
-                }`}
-              >
-                {internship.description.trim()}
-              </p>
-            )}
-          </div>
-        )
-      )}
-    </div>
-  );
-}
-
-function ExperienceContent({
-  resumeData,
-  compact = false,
-}: {
-  resumeData: ResumeData;
-  compact?: boolean;
-}) {
-  if (resumeData.experience.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="space-y-2.5">
-      {resumeData.experience.map(
-        (experience, index) => (
-          <div
-            key={`${experience.job_title}-${index}`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p
-                  className={`font-bold text-slate-800 ${
-                    compact
-                      ? "text-[7.5px]"
-                      : "text-[8.5px]"
-                  }`}
-                >
-                  {experience.job_title}
-                </p>
-
-                <p
-                  className={`text-slate-600 ${
-                    compact
-                      ? "text-[7px]"
-                      : "text-[8px]"
-                  }`}
-                >
-                  {experience.company}
-
-                  {experience.location
-                    ? `, ${experience.location}`
-                    : ""}
-                </p>
-              </div>
-
-              <p
-                className={`shrink-0 text-right italic text-slate-500 ${
-                  compact
-                    ? "text-[6.5px]"
-                    : "text-[7px]"
-                }`}
-              >
-                {getDateRange(
-                  experience.start_date,
-                  experience.end_date,
-                  experience.currently_working
-                )}
-              </p>
-            </div>
-
-            {experience.description?.trim() && (
-              <p
-                className={`mt-1 leading-[1.4] text-slate-600 ${
-                  compact
-                    ? "text-[7px]"
-                    : "text-[7.5px]"
-                }`}
-              >
-                {experience.description.trim()}
-              </p>
-            )}
-          </div>
-        )
-      )}
-    </div>
-  );
-}
-
-function EmptyResumeState() {
-  return (
-    <div className="flex min-h-[1000px] items-center justify-center bg-white p-10 text-center">
-      <div>
-        <div className="mx-auto mb-3 h-10 w-10 rounded-full bg-slate-100" />
-
-        <h3 className="text-sm font-semibold text-slate-700">
-          Your resume preview
+    <div className="mb-5 last:mb-0">
+      <div className="flex items-start justify-between gap-5">
+        <h3
+          className={`font-bold leading-[1.3] ${
+            style === "tech"
+              ? "text-[11.5px] text-[#0F172A]"
+              : "text-[11.5px] text-[#172033]"
+          }`}
+        >
+          {item.name || "Project"}
         </h3>
 
-        <p className="mt-1 max-w-xs text-xs leading-5 text-slate-400">
-          Start entering your information and your
-          resume will appear here automatically.
+        {item.project_url && (
+          <span className="flex max-w-[190px] shrink-0 items-center gap-1 truncate text-[8.5px] text-[#2563EB]">
+            <ExternalLink size={9} />
+            <span className="truncate">
+              {cleanUrl(item.project_url)}
+            </span>
+          </span>
+        )}
+      </div>
+
+      {hasText(item.description) && (
+        <p className="mt-1.5 whitespace-pre-line text-[10px] leading-[1.48] text-slate-600">
+          {item.description}
         </p>
+      )}
+
+      {item.technologies.length > 0 && (
+        <p
+          className={`mt-1.5 text-[9px] leading-[1.4] ${
+            style === "tech"
+              ? "font-medium text-slate-600"
+              : "text-slate-500"
+          }`}
+        >
+          {item.technologies.join(" • ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   EDUCATION
+========================================================= */
+
+function EducationBlock({
+  item,
+}: {
+  item: ResumeData["education"][number];
+}) {
+  return (
+    <div className="mb-4 last:mb-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-[10.5px] font-bold leading-[1.35] text-[#172033]">
+            {item.degree || "Degree"}
+          </h3>
+
+          {item.branch && (
+            <p className="mt-0.5 text-[9.5px] leading-[1.35] text-slate-600">
+              {item.branch}
+            </p>
+          )}
+
+          <p className="mt-0.5 text-[9.5px] font-semibold leading-[1.35] text-[#2563EB]">
+            {item.institution || "Institution"}
+          </p>
+
+          {item.location && (
+            <p className="mt-0.5 text-[9px] text-slate-500">
+              {item.location}
+            </p>
+          )}
+        </div>
+
+        {(item.start_date || item.end_date) && (
+          <span className="shrink-0 whitespace-nowrap text-[8.5px] text-slate-500">
+            {formatDate(item.start_date)}
+            {item.start_date && item.end_date ? " – " : ""}
+            {formatDate(item.end_date)}
+          </span>
+        )}
+      </div>
+
+      {item.description && (
+        <p className="mt-1.5 text-[9px] leading-[1.45] text-slate-500">
+          {item.description}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   CERTIFICATION
+========================================================= */
+
+function CertificationBlock({
+  item,
+}: {
+  item: ResumeData["certifications"][number];
+}) {
+  return (
+    <div className="mb-4 last:mb-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-[10px] font-bold leading-[1.35] text-[#172033]">
+            {item.name || "Certification"}
+          </h3>
+
+          <p className="mt-0.5 text-[9px] font-medium text-[#2563EB]">
+            {item.issuing_organization}
+          </p>
+
+          {item.credential_id && (
+            <p className="mt-1 text-[8.5px] text-slate-500">
+              ID: {item.credential_id}
+            </p>
+          )}
+        </div>
+
+        {item.issue_date && (
+          <span className="shrink-0 whitespace-nowrap text-[8.5px] text-slate-500">
+            {formatDate(item.issue_date)}
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function ResumePage({
-  children,
-  className = "",
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={`resume-a4-page mx-auto min-h-[1123px] w-full max-w-[794px] overflow-hidden bg-white ${className}`}
-      style={{
-        aspectRatio: "210 / 297",
-      }}
-    >
-      {children}
-    </div>
+/* =========================================================
+   DATA FILTER
+========================================================= */
+
+function useResumeSections(resumeData: ResumeData) {
+  const validExperience = resumeData.experience.filter(
+    (item) =>
+      hasText(item.job_title) ||
+      hasText(item.company) ||
+      hasText(item.description)
   );
+
+  const validInternships = resumeData.internships.filter(
+    (item) =>
+      hasText(item.internship_title) ||
+      hasText(item.company) ||
+      hasText(item.description) ||
+      item.technologies.length > 0
+  );
+
+  const validEducation = resumeData.education.filter(
+    (item) =>
+      hasText(item.degree) ||
+      hasText(item.institution) ||
+      hasText(item.branch) ||
+      hasText(item.description)
+  );
+
+  const validProjects = resumeData.projects.filter(
+    (item) =>
+      hasText(item.name) ||
+      hasText(item.description) ||
+      item.technologies.length > 0
+  );
+
+  const validCertifications =
+    resumeData.certifications.filter(
+      (item) =>
+        hasText(item.name) ||
+        hasText(item.issuing_organization)
+    );
+
+  return {
+    validExperience,
+    validInternships,
+    validEducation,
+    validProjects,
+    validCertifications,
+  };
 }
+
+/* =========================================================
+   CLASSIC TEMPLATE
+========================================================= */
 
 function ClassicTemplate({
   resumeData,
 }: {
   resumeData: ResumeData;
 }) {
-  const personal = resumeData.personal_info;
+  const {
+    personal_info,
+    professional_summary,
+    skills,
+  } = resumeData;
 
-  const hasContent =
-    personal.full_name ||
-    personal.professional_title ||
-    resumeData.professional_summary ||
-    resumeData.skills.technical.length ||
-    resumeData.skills.soft.length ||
-    resumeData.skills.other.length ||
-    resumeData.education.length ||
-    resumeData.projects.length ||
-    resumeData.certifications.length ||
-    resumeData.internships.length ||
-    resumeData.experience.length;
-
-  if (!hasContent) {
-    return <EmptyResumeState />;
-  }
+  const {
+    validExperience,
+    validInternships,
+    validEducation,
+    validProjects,
+    validCertifications,
+  } = useResumeSections(resumeData);
 
   return (
-    <ResumePage className="px-[52px] py-[44px]">
-      <header className="border-b border-slate-300 pb-4 text-center">
-        <h1 className="text-[22px] font-bold tracking-tight text-slate-900">
-          {personal.full_name || "Your Name"}
+    <div
+      className="h-[1123px] w-[794px] overflow-hidden bg-white text-slate-800"
+      style={{
+        fontFamily:
+          'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      }}
+    >
+      <header className="border-b-[3px] border-[#2563EB] px-[38px] pb-[20px] pt-[30px]">
+        <h1 className="text-[29px] font-extrabold tracking-[-0.035em] text-[#111827]">
+          {personal_info.full_name || "Your Name"}
         </h1>
 
-        {personal.professional_title && (
-          <p className="mt-1 text-[10px] font-medium text-slate-600">
-            {personal.professional_title}
-          </p>
-        )}
+        <p className="mt-2 text-[13px] font-semibold text-[#2563EB]">
+          {personal_info.professional_title ||
+            "Professional Title"}
+        </p>
 
-        <ContactInfo
-          resumeData={resumeData}
-          className="mt-2"
-        />
+        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[9.5px] text-slate-500">
+          {personal_info.email && (
+            <ContactItem
+              icon={<Mail size={10} />}
+            >
+              {personal_info.email}
+            </ContactItem>
+          )}
+
+          {personal_info.phone && (
+            <ContactItem
+              icon={<Phone size={10} />}
+            >
+              {personal_info.phone}
+            </ContactItem>
+          )}
+
+          {personal_info.location && (
+            <ContactItem
+              icon={<MapPin size={10} />}
+            >
+              {personal_info.location}
+            </ContactItem>
+          )}
+
+          {personal_info.linkedin && (
+            <ContactItem
+              icon={<ExternalLink size={10} />}
+            >
+              {cleanUrl(personal_info.linkedin)}
+            </ContactItem>
+          )}
+
+          {personal_info.github && (
+            <ContactItem
+              icon={<ExternalLink size={10} />}
+            >
+              {cleanUrl(personal_info.github)}
+            </ContactItem>
+          )}
+
+          {personal_info.portfolio && (
+            <ContactItem
+              icon={<ExternalLink size={10} />}
+            >
+              {cleanUrl(personal_info.portfolio)}
+            </ContactItem>
+          )}
+        </div>
       </header>
 
-      <main className="space-y-4 pt-4">
-        {resumeData.professional_summary?.trim() && (
-          <section>
-            <SectionTitle>
-              Professional Summary
-            </SectionTitle>
+      <div className="grid grid-cols-[225px_1fr]">
+        <aside className="min-h-[923px] border-r border-slate-200 bg-[#F5F8FC] px-[22px] py-[25px]">
+          {(skills.technical.length > 0 ||
+            skills.soft.length > 0 ||
+            skills.other.length > 0) && (
+            <section className="mb-7">
+              <SectionTitle
+                icon={<Wrench size={14} />}
+                title="Skills"
+              />
 
-            <SummaryContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+              {skills.technical.length > 0 && (
+                <div className="mb-4">
+                  <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                    Technical
+                  </p>
+                  <SkillList
+                    skills={skills.technical}
+                    chip
+                  />
+                </div>
+              )}
 
-        {(resumeData.skills.technical.length > 0 ||
-          resumeData.skills.soft.length > 0 ||
-          resumeData.skills.other.length > 0) && (
-          <section>
-            <SectionTitle>Skills</SectionTitle>
+              {skills.soft.length > 0 && (
+                <div className="mb-4">
+                  <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                    Soft Skills
+                  </p>
+                  <SkillList
+                    skills={skills.soft}
+                    chip
+                  />
+                </div>
+              )}
 
-            <SkillsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+              {skills.other.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                    Other
+                  </p>
+                  <SkillList
+                    skills={skills.other}
+                    chip
+                  />
+                </div>
+              )}
+            </section>
+          )}
 
-        {resumeData.education.length > 0 && (
-          <section>
-            <SectionTitle>Education</SectionTitle>
+          {validEducation.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                icon={<GraduationCap size={14} />}
+                title="Education"
+              />
 
-            <EducationContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+              {validEducation.map((item, index) => (
+                <EducationBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
 
-        {resumeData.projects.length > 0 && (
-          <section>
-            <SectionTitle>Projects</SectionTitle>
+          {validCertifications.length > 0 && (
+            <section>
+              <SectionTitle
+                icon={<Award size={14} />}
+                title="Certifications"
+              />
 
-            <ProjectsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+              {validCertifications.map(
+                (item, index) => (
+                  <CertificationBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </aside>
 
-        {resumeData.certifications.length > 0 && (
-          <section>
-            <SectionTitle>
-              Certifications
-            </SectionTitle>
+        <main className="px-[29px] py-[25px]">
+          {hasText(professional_summary) && (
+            <section className="mb-6">
+              <SectionTitle
+                icon={<UserCircle size={14} />}
+                title="Professional Summary"
+              />
 
-            <CertificationsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+              <p className="text-[10.5px] leading-[1.55] text-slate-600">
+                {professional_summary}
+              </p>
+            </section>
+          )}
 
-        {resumeData.internships.length > 0 && (
-          <section>
-            <SectionTitle>
-              Internships
-            </SectionTitle>
+          {validExperience.length > 0 && (
+            <section className="mb-6">
+              <SectionTitle
+                icon={<BriefcaseBusiness size={14} />}
+                title="Experience"
+              />
 
-            <InternshipsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+              {validExperience.map((item, index) => (
+                <ExperienceBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
 
-        {resumeData.experience.length > 0 && (
-          <section>
-            <SectionTitle>
-              Experience
-            </SectionTitle>
+          {validProjects.length > 0 && (
+            <section className="mb-6">
+              <SectionTitle
+                icon={<Layers3 size={14} />}
+                title="Projects"
+              />
 
-            <ExperienceContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
-      </main>
-    </ResumePage>
+              {validProjects.map((item, index) => (
+                <ProjectBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
+
+          {validInternships.length > 0 && (
+            <section>
+              <SectionTitle
+                icon={<BriefcaseBusiness size={14} />}
+                title="Internships"
+              />
+
+              {validInternships.map(
+                (item, index) => (
+                  <InternshipBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </main>
+      </div>
+    </div>
   );
 }
+
+/* =========================================================
+   MODERN BLUE
+========================================================= */
 
 function ModernBlueTemplate({
   resumeData,
 }: {
   resumeData: ResumeData;
 }) {
-  const personal = resumeData.personal_info;
+  const {
+    personal_info,
+    professional_summary,
+    skills,
+  } = resumeData;
+
+  const {
+    validExperience,
+    validInternships,
+    validEducation,
+    validProjects,
+    validCertifications,
+  } = useResumeSections(resumeData);
 
   return (
-    <ResumePage>
-      <header className="bg-sky-50 px-[52px] py-[38px]">
-        <h1 className="text-[24px] font-bold text-slate-900">
-          {personal.full_name || "Your Name"}
+    <div
+      className="h-[1123px] w-[794px] overflow-hidden bg-white"
+      style={{
+        fontFamily:
+          'Inter, ui-sans-serif, system-ui, sans-serif',
+      }}
+    >
+      <header className="bg-[#172033] px-[42px] py-[31px] text-white">
+        <h1 className="text-[30px] font-extrabold tracking-[-0.04em]">
+          {personal_info.full_name || "Your Name"}
         </h1>
 
-        {personal.professional_title && (
-          <p className="mt-1 text-[10px] font-medium text-sky-700">
-            {personal.professional_title}
-          </p>
-        )}
+        <p className="mt-2 text-[13px] font-semibold text-blue-300">
+          {personal_info.professional_title ||
+            "Professional Title"}
+        </p>
 
-        <ContactInfo
-          resumeData={resumeData}
-          className="mt-2 justify-start"
-        />
-      </header>
-
-      <main className="px-[52px] py-[32px]">
-        <div className="space-y-4">
-          {resumeData.professional_summary?.trim() && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Professional Summary
-              </h2>
-
-              <SummaryContent
-                resumeData={resumeData}
-              />
-            </section>
+        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[9px] text-slate-300">
+          {personal_info.email && (
+            <span>{personal_info.email}</span>
           )}
 
-          {(resumeData.skills.technical.length > 0 ||
-            resumeData.skills.soft.length > 0 ||
-            resumeData.skills.other.length > 0) && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Skills
-              </h2>
-
-              <SkillsContent
-                resumeData={resumeData}
-              />
-            </section>
+          {personal_info.phone && (
+            <span>{personal_info.phone}</span>
           )}
 
-          {resumeData.education.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Education
-              </h2>
-
-              <EducationContent
-                resumeData={resumeData}
-              />
-            </section>
+          {personal_info.location && (
+            <span>{personal_info.location}</span>
           )}
 
-          {resumeData.projects.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Projects
-              </h2>
-
-              <ProjectsContent
-                resumeData={resumeData}
-              />
-            </section>
+          {personal_info.linkedin && (
+            <span>{cleanUrl(personal_info.linkedin)}</span>
           )}
 
-          {resumeData.certifications.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Certifications
-              </h2>
-
-              <CertificationsContent
-                resumeData={resumeData}
-              />
-            </section>
-          )}
-
-          {resumeData.internships.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Internships
-              </h2>
-
-              <InternshipsContent
-                resumeData={resumeData}
-              />
-            </section>
-          )}
-
-          {resumeData.experience.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Experience
-              </h2>
-
-              <ExperienceContent
-                resumeData={resumeData}
-              />
-            </section>
+          {personal_info.github && (
+            <span>{cleanUrl(personal_info.github)}</span>
           )}
         </div>
-      </main>
-    </ResumePage>
+      </header>
+
+      <div className="grid grid-cols-[1fr_245px]">
+        <main className="px-[34px] py-[27px]">
+          {hasText(professional_summary) && (
+            <section className="mb-6">
+              <SectionTitle
+                title="Profile"
+                color="#2563EB"
+              />
+
+              <p className="text-[10.5px] leading-[1.55] text-slate-600">
+                {professional_summary}
+              </p>
+            </section>
+          )}
+
+          {validExperience.length > 0 && (
+            <section className="mb-6">
+              <SectionTitle
+                title="Experience"
+                color="#2563EB"
+              />
+
+              {validExperience.map((item, index) => (
+                <ExperienceBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
+
+          {validProjects.length > 0 && (
+            <section className="mb-6">
+              <SectionTitle
+                title="Projects"
+                color="#2563EB"
+              />
+
+              {validProjects.map((item, index) => (
+                <ProjectBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
+
+          {validInternships.length > 0 && (
+            <section>
+              <SectionTitle
+                title="Internships"
+                color="#2563EB"
+              />
+
+              {validInternships.map(
+                (item, index) => (
+                  <InternshipBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </main>
+
+        <aside className="min-h-[923px] bg-[#F1F5F9] px-[23px] py-[27px]">
+          {skills.technical.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Technical Skills"
+                color="#2563EB"
+              />
+              <SkillList
+                skills={skills.technical}
+                chip
+              />
+            </section>
+          )}
+
+          {skills.soft.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Soft Skills"
+                color="#2563EB"
+              />
+              <SkillList
+                skills={skills.soft}
+                chip
+              />
+            </section>
+          )}
+
+          {validEducation.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Education"
+                color="#2563EB"
+              />
+
+              {validEducation.map((item, index) => (
+                <EducationBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
+
+          {validCertifications.length > 0 && (
+            <section>
+              <SectionTitle
+                title="Certifications"
+                color="#2563EB"
+              />
+
+              {validCertifications.map(
+                (item, index) => (
+                  <CertificationBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </aside>
+      </div>
+    </div>
   );
 }
+
+/* =========================================================
+   EXECUTIVE
+========================================================= */
 
 function ExecutiveTemplate({
   resumeData,
 }: {
   resumeData: ResumeData;
 }) {
-  const personal = resumeData.personal_info;
+  const {
+    personal_info,
+    professional_summary,
+  } = resumeData;
+
+  const {
+    validExperience,
+    validInternships,
+    validEducation,
+    validProjects,
+    validCertifications,
+  } = useResumeSections(resumeData);
 
   return (
-    <ResumePage className="grid grid-cols-[245px_1fr]">
-      <aside className="bg-slate-800 px-7 py-9 text-white">
-        <h1 className="text-[20px] font-bold leading-tight">
-          {personal.full_name || "Your Name"}
+    <div
+      className="h-[1123px] w-[794px] overflow-hidden bg-white text-[#1E293B]"
+      style={{
+        fontFamily:
+          'Georgia, "Times New Roman", serif',
+      }}
+    >
+      <header className="px-[48px] pb-[24px] pt-[40px]">
+        <h1 className="text-[31px] font-bold tracking-[-0.03em] text-[#111827]">
+          {personal_info.full_name || "Your Name"}
         </h1>
 
-        {personal.professional_title && (
-          <p className="mt-2 text-[9px] leading-4 text-slate-300">
-            {personal.professional_title}
-          </p>
-        )}
-
-        <div className="mt-5 border-t border-slate-600 pt-4">
-          <p className="mb-2 text-[8px] font-bold uppercase tracking-[0.1em] text-slate-400">
-            Contact
+        <div className="mt-2 flex items-center justify-between border-b-2 border-[#1E293B] pb-4">
+          <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-[#475569]">
+            {personal_info.professional_title ||
+              "Professional Title"}
           </p>
 
-          <div className="space-y-1.5 break-all text-[7px] leading-3 text-slate-300">
-            {personal.email && (
-              <p>{personal.email}</p>
+          <div className="text-right text-[8.8px] leading-[1.7] text-slate-500">
+            {personal_info.email && (
+              <div>{personal_info.email}</div>
             )}
-
-            {personal.phone && (
-              <p>{personal.phone}</p>
+            {personal_info.phone && (
+              <div>{personal_info.phone}</div>
             )}
-
-            {personal.location && (
-              <p>{personal.location}</p>
-            )}
-
-            {personal.linkedin && (
-              <p>{personal.linkedin}</p>
-            )}
-
-            {personal.github && (
-              <p>{personal.github}</p>
-            )}
-
-            {personal.portfolio && (
-              <p>{personal.portfolio}</p>
+            {personal_info.location && (
+              <div>{personal_info.location}</div>
             )}
           </div>
         </div>
+      </header>
 
-        {(resumeData.skills.technical.length > 0 ||
-          resumeData.skills.soft.length > 0 ||
-          resumeData.skills.other.length > 0) && (
-          <div className="mt-6">
-            <p className="mb-2 text-[8px] font-bold uppercase tracking-[0.1em] text-slate-400">
-              Skills
+      <main className="px-[48px] pb-[30px]">
+        {hasText(professional_summary) && (
+          <section className="mb-6">
+            <SectionTitle
+              title="Executive Profile"
+              color="#334155"
+            />
+
+            <p className="text-[10.5px] leading-[1.65] text-slate-600">
+              {professional_summary}
             </p>
+          </section>
+        )}
 
-            <SkillsContent
-              resumeData={resumeData}
-              compact
+        {validExperience.length > 0 && (
+          <section className="mb-6">
+            <SectionTitle
+              title="Professional Experience"
+              color="#334155"
             />
+
+            {validExperience.map((item, index) => (
+              <ExperienceBlock
+                key={index}
+                item={item}
+              />
+            ))}
+          </section>
+        )}
+
+        <div className="grid grid-cols-[1.5fr_1fr] gap-[32px]">
+          <div>
+            {validProjects.length > 0 && (
+              <section className="mb-6">
+                <SectionTitle
+                  title="Selected Projects"
+                  color="#334155"
+                />
+
+                {validProjects.map(
+                  (item, index) => (
+                    <ProjectBlock
+                      key={index}
+                      item={item}
+                      style="minimal"
+                    />
+                  )
+                )}
+              </section>
+            )}
+
+            {validInternships.length > 0 && (
+              <section>
+                <SectionTitle
+                  title="Internships"
+                  color="#334155"
+                />
+
+                {validInternships.map(
+                  (item, index) => (
+                    <InternshipBlock
+                      key={index}
+                      item={item}
+                    />
+                  )
+                )}
+              </section>
+            )}
           </div>
-        )}
 
-        {resumeData.education.length > 0 && (
-          <div className="mt-6">
-            <p className="mb-2 text-[8px] font-bold uppercase tracking-[0.1em] text-slate-400">
-              Education
-            </p>
+          <aside>
+            {validEducation.length > 0 && (
+              <section className="mb-6">
+                <SectionTitle
+                  title="Education"
+                  color="#334155"
+                />
 
-            <EducationContent
-              resumeData={resumeData}
-              compact
-            />
-          </div>
-        )}
+                {validEducation.map(
+                  (item, index) => (
+                    <EducationBlock
+                      key={index}
+                      item={item}
+                    />
+                  )
+                )}
+              </section>
+            )}
 
-        {resumeData.certifications.length > 0 && (
-          <div className="mt-6">
-            <p className="mb-2 text-[8px] font-bold uppercase tracking-[0.1em] text-slate-400">
-              Certifications
-            </p>
+            {validCertifications.length > 0 && (
+              <section>
+                <SectionTitle
+                  title="Certifications"
+                  color="#334155"
+                />
 
-            <CertificationsContent
-              resumeData={resumeData}
-              compact
-            />
-          </div>
-        )}
-      </aside>
-
-      <main className="px-8 py-9">
-        {resumeData.professional_summary?.trim() && (
-          <section>
-            <SectionTitle>
-              Profile
-            </SectionTitle>
-
-            <SummaryContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
-
-        {resumeData.experience.length > 0 && (
-          <section className="mt-5">
-            <SectionTitle>
-              Experience
-            </SectionTitle>
-
-            <ExperienceContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
-
-        {resumeData.internships.length > 0 && (
-          <section className="mt-5">
-            <SectionTitle>
-              Internships
-            </SectionTitle>
-
-            <InternshipsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
-
-        {resumeData.projects.length > 0 && (
-          <section className="mt-5">
-            <SectionTitle>
-              Projects
-            </SectionTitle>
-
-            <ProjectsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+                {validCertifications.map(
+                  (item, index) => (
+                    <CertificationBlock
+                      key={index}
+                      item={item}
+                    />
+                  )
+                )}
+              </section>
+            )}
+          </aside>
+        </div>
       </main>
-    </ResumePage>
+    </div>
   );
 }
+
+/* =========================================================
+   MINIMAL
+========================================================= */
 
 function MinimalTemplate({
   resumeData,
 }: {
   resumeData: ResumeData;
 }) {
-  const personal = resumeData.personal_info;
+  const {
+    personal_info,
+    professional_summary,
+    skills,
+  } = resumeData;
+
+  const {
+    validExperience,
+    validInternships,
+    validEducation,
+    validProjects,
+    validCertifications,
+  } = useResumeSections(resumeData);
 
   return (
-    <ResumePage className="px-[60px] py-[52px]">
-      <header className="pb-5">
-        <h1 className="text-[25px] font-light tracking-tight text-slate-900">
-          {personal.full_name || "Your Name"}
+    <div
+      className="h-[1123px] w-[794px] overflow-hidden bg-white text-[#1F2937]"
+      style={{
+        fontFamily:
+          'Inter, ui-sans-serif, system-ui, sans-serif',
+      }}
+    >
+      <header className="px-[54px] pb-[22px] pt-[44px]">
+        <h1 className="text-[32px] font-semibold tracking-[-0.045em] text-[#111827]">
+          {personal_info.full_name || "Your Name"}
         </h1>
 
-        {personal.professional_title && (
-          <p className="mt-1 text-[9px] text-slate-500">
-            {personal.professional_title}
-          </p>
-        )}
+        <p className="mt-2 text-[12px] font-medium text-slate-500">
+          {personal_info.professional_title ||
+            "Professional Title"}
+        </p>
 
-        <ContactInfo
-          resumeData={resumeData}
-          className="mt-3 justify-start"
-        />
+        <div className="mt-5 flex flex-wrap gap-x-5 gap-y-1.5 border-t border-slate-200 pt-3 text-[9px] text-slate-500">
+          {personal_info.email && (
+            <span>{personal_info.email}</span>
+          )}
+
+          {personal_info.phone && (
+            <span>{personal_info.phone}</span>
+          )}
+
+          {personal_info.location && (
+            <span>{personal_info.location}</span>
+          )}
+
+          {personal_info.linkedin && (
+            <span>{cleanUrl(personal_info.linkedin)}</span>
+          )}
+
+          {personal_info.github && (
+            <span>{cleanUrl(personal_info.github)}</span>
+          )}
+        </div>
       </header>
 
-      <div className="h-px bg-slate-200" />
+      <main className="grid grid-cols-[1fr_220px] gap-[36px] px-[54px] py-[25px]">
+        <div>
+          {hasText(professional_summary) && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Profile"
+                line={false}
+              />
 
-      <main className="space-y-5 pt-5">
-        {resumeData.professional_summary?.trim() && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Summary
-            </h2>
+              <p className="text-[10.5px] leading-[1.6] text-slate-600">
+                {professional_summary}
+              </p>
+            </section>
+          )}
 
-            <SummaryContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+          {validExperience.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Experience"
+                line={false}
+              />
 
-        {(resumeData.skills.technical.length > 0 ||
-          resumeData.skills.soft.length > 0 ||
-          resumeData.skills.other.length > 0) && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Skills
-            </h2>
+              {validExperience.map((item, index) => (
+                <ExperienceBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
 
-            <SkillsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+          {validProjects.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Projects"
+                line={false}
+              />
 
-        {resumeData.experience.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Experience
-            </h2>
+              {validProjects.map((item, index) => (
+                <ProjectBlock
+                  key={index}
+                  item={item}
+                  style="minimal"
+                />
+              ))}
+            </section>
+          )}
 
-            <ExperienceContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+          {validInternships.length > 0 && (
+            <section>
+              <SectionTitle
+                title="Internships"
+                line={false}
+              />
 
-        {resumeData.internships.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Internships
-            </h2>
+              {validInternships.map(
+                (item, index) => (
+                  <InternshipBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </div>
 
-            <InternshipsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+        <aside className="border-l border-slate-200 pl-[25px]">
+          {skills.technical.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Skills"
+                line={false}
+              />
 
-        {resumeData.projects.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Projects
-            </h2>
+              <SkillList
+                skills={skills.technical}
+              />
+            </section>
+          )}
 
-            <ProjectsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+          {skills.soft.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Soft Skills"
+                line={false}
+              />
 
-        {resumeData.education.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Education
-            </h2>
+              <SkillList
+                skills={skills.soft}
+              />
+            </section>
+          )}
 
-            <EducationContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+          {validEducation.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Education"
+                line={false}
+              />
 
-        {resumeData.certifications.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Certifications
-            </h2>
+              {validEducation.map((item, index) => (
+                <EducationBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
 
-            <CertificationsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+          {validCertifications.length > 0 && (
+            <section>
+              <SectionTitle
+                title="Certifications"
+                line={false}
+              />
+
+              {validCertifications.map(
+                (item, index) => (
+                  <CertificationBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </aside>
       </main>
-    </ResumePage>
+    </div>
   );
 }
+
+/* =========================================================
+   CREATIVE BLUE
+========================================================= */
 
 function CreativeBlueTemplate({
   resumeData,
 }: {
   resumeData: ResumeData;
 }) {
-  const personal = resumeData.personal_info;
+  const {
+    personal_info,
+    professional_summary,
+    skills,
+  } = resumeData;
 
-  const initials =
-    personal.full_name
-      ?.split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) =>
-        part[0]?.toUpperCase()
-      )
-      .join("") || "YN";
+  const {
+    validExperience,
+    validInternships,
+    validEducation,
+    validProjects,
+    validCertifications,
+  } = useResumeSections(resumeData);
 
   return (
-    <ResumePage className="grid grid-cols-[240px_1fr]">
-      <aside className="bg-sky-50 px-7 py-9">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sky-600 text-[20px] font-bold text-white">
-          {initials}
-        </div>
+    <div
+      className="h-[1123px] w-[794px] overflow-hidden bg-white"
+      style={{
+        fontFamily:
+          'Inter, ui-sans-serif, system-ui, sans-serif',
+      }}
+    >
+      <header className="relative overflow-hidden bg-[#EFF6FF] px-[42px] pb-[25px] pt-[38px]">
+        <div className="absolute right-[-35px] top-[-55px] h-[180px] w-[180px] rounded-full bg-[#DBEAFE]" />
 
-        <h1 className="mt-4 text-[18px] font-bold text-slate-900">
-          {personal.full_name || "Your Name"}
-        </h1>
-
-        {personal.professional_title && (
-          <p className="mt-1 text-[8px] font-medium text-sky-700">
-            {personal.professional_title}
-          </p>
-        )}
-
-        <div className="mt-5 border-t border-sky-200 pt-4">
-          <p className="mb-2 text-[8px] font-bold uppercase tracking-[0.1em] text-sky-700">
-            Contact
+        <div className="relative">
+          <p className="mb-2 text-[9px] font-bold uppercase tracking-[0.22em] text-[#2563EB]">
+            Professional Resume
           </p>
 
-          <div className="space-y-1.5 break-all text-[7px] leading-3 text-slate-600">
-            {personal.email && (
-              <p>{personal.email}</p>
-            )}
+          <h1 className="text-[31px] font-extrabold tracking-[-0.045em] text-[#111827]">
+            {personal_info.full_name || "Your Name"}
+          </h1>
 
-            {personal.phone && (
-              <p>{personal.phone}</p>
-            )}
+          <p className="mt-2 text-[13px] font-semibold text-[#2563EB]">
+            {personal_info.professional_title ||
+              "Professional Title"}
+          </p>
 
-            {personal.location && (
-              <p>{personal.location}</p>
+          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[9px] text-slate-600">
+            {personal_info.email && (
+              <span>{personal_info.email}</span>
             )}
-
-            {personal.linkedin && (
-              <p>{personal.linkedin}</p>
+            {personal_info.phone && (
+              <span>{personal_info.phone}</span>
             )}
-
-            {personal.github && (
-              <p>{personal.github}</p>
+            {personal_info.location && (
+              <span>{personal_info.location}</span>
             )}
-
-            {personal.portfolio && (
-              <p>{personal.portfolio}</p>
+            {personal_info.linkedin && (
+              <span>{cleanUrl(personal_info.linkedin)}</span>
+            )}
+            {personal_info.github && (
+              <span>{cleanUrl(personal_info.github)}</span>
             )}
           </div>
         </div>
+      </header>
 
-        {(resumeData.skills.technical.length > 0 ||
-          resumeData.skills.soft.length > 0 ||
-          resumeData.skills.other.length > 0) && (
-          <div className="mt-6">
-            <p className="mb-2 text-[8px] font-bold uppercase tracking-[0.1em] text-sky-700">
-              Skills
-            </p>
+      <div className="grid grid-cols-[230px_1fr]">
+        <aside className="min-h-[905px] bg-[#F8FAFC] px-[23px] py-[27px]">
+          {skills.technical.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Technical Skills"
+                color="#2563EB"
+              />
+              <SkillList
+                skills={skills.technical}
+                chip
+              />
+            </section>
+          )}
 
-            <SkillsContent
-              resumeData={resumeData}
-              compact
-            />
-          </div>
-        )}
+          {skills.soft.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Soft Skills"
+                color="#2563EB"
+              />
+              <SkillList
+                skills={skills.soft}
+                chip
+              />
+            </section>
+          )}
 
-        {resumeData.certifications.length > 0 && (
-          <div className="mt-6">
-            <p className="mb-2 text-[8px] font-bold uppercase tracking-[0.1em] text-sky-700">
-              Certifications
-            </p>
+          {validEducation.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Education"
+                color="#2563EB"
+              />
+              {validEducation.map((item, index) => (
+                <EducationBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
 
-            <CertificationsContent
-              resumeData={resumeData}
-              compact
-            />
-          </div>
-        )}
-      </aside>
+          {validCertifications.length > 0 && (
+            <section>
+              <SectionTitle
+                title="Certifications"
+                color="#2563EB"
+              />
+              {validCertifications.map(
+                (item, index) => (
+                  <CertificationBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </aside>
 
-      <main className="px-8 py-9">
-        {resumeData.professional_summary?.trim() && (
-          <section>
-            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-              Profile
-            </h2>
+        <main className="px-[29px] py-[27px]">
+          {hasText(professional_summary) && (
+            <section className="mb-6">
+              <SectionTitle
+                title="About Me"
+                color="#2563EB"
+              />
+              <p className="text-[10.5px] leading-[1.55] text-slate-600">
+                {professional_summary}
+              </p>
+            </section>
+          )}
 
-            <SummaryContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
+          {validExperience.length > 0 && (
+            <section className="mb-6">
+              <SectionTitle
+                title="Experience"
+                color="#2563EB"
+              />
+              {validExperience.map((item, index) => (
+                <ExperienceBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
 
-        {resumeData.experience.length > 0 && (
-          <section className="mt-5">
-            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-              Experience
-            </h2>
+          {validProjects.length > 0 && (
+            <section className="mb-6">
+              <SectionTitle
+                title="Projects"
+                color="#2563EB"
+              />
+              {validProjects.map((item, index) => (
+                <ProjectBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
 
-            <ExperienceContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
-
-        {resumeData.internships.length > 0 && (
-          <section className="mt-5">
-            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-              Internships
-            </h2>
-
-            <InternshipsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
-
-        {resumeData.projects.length > 0 && (
-          <section className="mt-5">
-            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-              Projects
-            </h2>
-
-            <ProjectsContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
-
-        {resumeData.education.length > 0 && (
-          <section className="mt-5">
-            <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-              Education
-            </h2>
-
-            <EducationContent
-              resumeData={resumeData}
-            />
-          </section>
-        )}
-      </main>
-    </ResumePage>
+          {validInternships.length > 0 && (
+            <section>
+              <SectionTitle
+                title="Internships"
+                color="#2563EB"
+              />
+              {validInternships.map(
+                (item, index) => (
+                  <InternshipBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </main>
+      </div>
+    </div>
   );
 }
+
+/* =========================================================
+   TECH
+========================================================= */
 
 function TechTemplate({
   resumeData,
 }: {
   resumeData: ResumeData;
 }) {
-  const personal = resumeData.personal_info;
+  const {
+    personal_info,
+    professional_summary,
+    skills,
+  } = resumeData;
+
+  const {
+    validExperience,
+    validInternships,
+    validEducation,
+    validProjects,
+    validCertifications,
+  } = useResumeSections(resumeData);
 
   return (
-    <ResumePage className="bg-slate-950 px-8 py-8 text-slate-100">
-      <header className="border-b border-slate-700 pb-5">
-        <div className="flex items-end justify-between gap-5">
+    <div
+      className="h-[1123px] w-[794px] overflow-hidden bg-white text-[#172033]"
+      style={{
+        fontFamily:
+          'Inter, ui-sans-serif, system-ui, sans-serif',
+      }}
+    >
+      <header className="border-b border-slate-300 bg-[#F8FAFC] px-[40px] py-[30px]">
+        <div className="flex items-end justify-between gap-8">
           <div>
-            <p className="mb-1 text-[7px] font-semibold uppercase tracking-[0.2em] text-cyan-400">
-              SOFTWARE / AI
+            <p className="font-mono text-[9px] font-semibold tracking-[0.15em] text-[#2563EB]">
+              SOFTWARE / TECHNOLOGY
             </p>
 
-            <h1 className="text-[23px] font-bold">
-              {personal.full_name || "Your Name"}
+            <h1 className="mt-2 text-[29px] font-extrabold tracking-[-0.04em]">
+              {personal_info.full_name || "Your Name"}
             </h1>
 
-            {personal.professional_title && (
-              <p className="mt-1 text-[9px] text-slate-400">
-                {personal.professional_title}
-              </p>
-            )}
+            <p className="mt-1.5 text-[12px] font-medium text-slate-600">
+              {personal_info.professional_title ||
+                "Software Developer"}
+            </p>
           </div>
 
-          <div className="max-w-[300px] text-right">
-            <ContactInfo
-              resumeData={resumeData}
-              className="justify-end text-slate-400"
-            />
+          <div className="text-right font-mono text-[8.5px] leading-[1.8] text-slate-500">
+            {personal_info.email && (
+              <div>{personal_info.email}</div>
+            )}
+            {personal_info.phone && (
+              <div>{personal_info.phone}</div>
+            )}
+            {personal_info.location && (
+              <div>{personal_info.location}</div>
+            )}
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[8.5px] text-[#2563EB]">
+          {personal_info.github && (
+            <span>{cleanUrl(personal_info.github)}</span>
+          )}
+          {personal_info.linkedin && (
+            <span>{cleanUrl(personal_info.linkedin)}</span>
+          )}
+          {personal_info.portfolio && (
+            <span>{cleanUrl(personal_info.portfolio)}</span>
+          )}
         </div>
       </header>
 
-      <main className="space-y-4 pt-5">
-        {resumeData.professional_summary?.trim() && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-400">
-              Profile
-            </h2>
-
-            <SummaryContent
-              resumeData={resumeData}
-              className="text-slate-300"
-            />
-          </section>
-        )}
-
-        {(resumeData.skills.technical.length > 0 ||
-          resumeData.skills.soft.length > 0 ||
-          resumeData.skills.other.length > 0) && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-400">
-              Tech Stack
-            </h2>
-
-            <SkillsContent
-              resumeData={resumeData}
-              compact
-            />
-          </section>
-        )}
-
-        {resumeData.projects.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-400">
-              Projects
-            </h2>
-
-            <ProjectsContent
-              resumeData={resumeData}
-              compact
-              boxed
-            />
-          </section>
-        )}
-
-        {resumeData.experience.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-400">
-              Experience
-            </h2>
-
-            <div className="[&_*]:!text-slate-300">
-              <ExperienceContent
-                resumeData={resumeData}
-                compact
+      <div className="grid grid-cols-[1fr_232px]">
+        <main className="px-[31px] py-[27px]">
+          {hasText(professional_summary) && (
+            <section className="mb-6">
+              <SectionTitle
+                title="Summary"
+                color="#2563EB"
               />
-            </div>
-          </section>
-        )}
 
-        {resumeData.internships.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-400">
-              Internships
-            </h2>
+              <p className="text-[10.5px] leading-[1.55] text-slate-600">
+                {professional_summary}
+              </p>
+            </section>
+          )}
 
-            <div className="[&_*]:!text-slate-300">
-              <InternshipsContent
-                resumeData={resumeData}
-                compact
+          {validExperience.length > 0 && (
+            <section className="mb-6">
+              <SectionTitle
+                title="Experience"
+                color="#2563EB"
               />
-            </div>
-          </section>
-        )}
 
-        {resumeData.education.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-400">
-              Education
-            </h2>
+              {validExperience.map((item, index) => (
+                <ExperienceBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
 
-            <div className="[&_*]:!text-slate-300">
-              <EducationContent
-                resumeData={resumeData}
-                compact
+          {validProjects.length > 0 && (
+            <section className="mb-6">
+              <SectionTitle
+                title="Projects"
+                color="#2563EB"
               />
-            </div>
-          </section>
-        )}
-      </main>
-    </ResumePage>
+
+              {validProjects.map((item, index) => (
+                <ProjectBlock
+                  key={index}
+                  item={item}
+                  style="tech"
+                />
+              ))}
+            </section>
+          )}
+
+          {validInternships.length > 0 && (
+            <section>
+              <SectionTitle
+                title="Internships"
+                color="#2563EB"
+              />
+
+              {validInternships.map(
+                (item, index) => (
+                  <InternshipBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </main>
+
+        <aside className="min-h-[905px] border-l border-slate-200 bg-[#F8FAFC] px-[22px] py-[27px]">
+          {skills.technical.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Technical Stack"
+                color="#2563EB"
+              />
+
+              <SkillList
+                skills={skills.technical}
+              />
+            </section>
+          )}
+
+          {skills.soft.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Core Skills"
+                color="#2563EB"
+              />
+
+              <SkillList
+                skills={skills.soft}
+              />
+            </section>
+          )}
+
+          {skills.other.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Other"
+                color="#2563EB"
+              />
+
+              <SkillList
+                skills={skills.other}
+              />
+            </section>
+          )}
+
+          {validEducation.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Education"
+                color="#2563EB"
+              />
+
+              {validEducation.map((item, index) => (
+                <EducationBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
+            </section>
+          )}
+
+          {validCertifications.length > 0 && (
+            <section>
+              <SectionTitle
+                title="Certifications"
+                color="#2563EB"
+              />
+
+              {validCertifications.map(
+                (item, index) => (
+                  <CertificationBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
+            </section>
+          )}
+        </aside>
+      </div>
+    </div>
   );
 }
+
+/* =========================================================
+   PROFESSIONAL SPLIT
+========================================================= */
 
 function ProfessionalSplitTemplate({
   resumeData,
 }: {
   resumeData: ResumeData;
 }) {
-  const personal = resumeData.personal_info;
+  const {
+    personal_info,
+    professional_summary,
+    skills,
+  } = resumeData;
+
+  const {
+    validExperience,
+    validInternships,
+    validEducation,
+    validProjects,
+    validCertifications,
+  } = useResumeSections(resumeData);
 
   return (
-    <ResumePage>
-      <header className="border-b-4 border-indigo-600 px-[52px] py-7">
-        <h1 className="text-[23px] font-bold text-slate-900">
-          {personal.full_name || "Your Name"}
-        </h1>
+    <div
+      className="h-[1123px] w-[794px] overflow-hidden bg-white"
+      style={{
+        fontFamily:
+          'Inter, ui-sans-serif, system-ui, sans-serif',
+      }}
+    >
+      <div className="grid grid-cols-[205px_1fr]">
+        <aside className="min-h-[1123px] bg-[#172033] px-[22px] py-[35px] text-white">
+          <div className="border-b border-white/15 pb-6">
+            <h1 className="text-[23px] font-extrabold leading-[1.05] tracking-[-0.035em]">
+              {personal_info.full_name || "Your Name"}
+            </h1>
 
-        {personal.professional_title && (
-          <p className="mt-1 text-[9px] font-medium text-indigo-600">
-            {personal.professional_title}
-          </p>
-        )}
+            <p className="mt-3 text-[10px] font-semibold leading-[1.4] text-blue-300">
+              {personal_info.professional_title ||
+                "Professional Title"}
+            </p>
+          </div>
 
-        <ContactInfo
-          resumeData={resumeData}
-          className="mt-2 justify-start"
-        />
-      </header>
+          <div className="border-b border-white/15 py-5 text-[8.5px] leading-[1.8] text-slate-300">
+            {personal_info.email && (
+              <div>{personal_info.email}</div>
+            )}
 
-      <div className="grid grid-cols-[220px_1fr]">
-        <aside className="bg-slate-50 px-6 py-7">
-          {(resumeData.skills.technical.length > 0 ||
-            resumeData.skills.soft.length > 0 ||
-            resumeData.skills.other.length > 0) && (
-            <section>
-              <h2 className="mb-2 text-[8px] font-bold uppercase tracking-[0.12em] text-indigo-700">
+            {personal_info.phone && (
+              <div>{personal_info.phone}</div>
+            )}
+
+            {personal_info.location && (
+              <div>{personal_info.location}</div>
+            )}
+
+            {personal_info.linkedin && (
+              <div className="mt-1 break-all text-blue-300">
+                {cleanUrl(personal_info.linkedin)}
+              </div>
+            )}
+
+            {personal_info.github && (
+              <div className="break-all text-blue-300">
+                {cleanUrl(personal_info.github)}
+              </div>
+            )}
+          </div>
+
+          {skills.technical.length > 0 && (
+            <section className="border-b border-white/15 py-5">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-white">
                 Skills
-              </h2>
+              </p>
 
-              <SkillsContent
-                resumeData={resumeData}
-                compact
-              />
+              <div className="space-y-2">
+                {skills.technical.map(
+                  (skill, index) => (
+                    <div
+                      key={`${skill}-${index}`}
+                      className="text-[9px] text-slate-300"
+                    >
+                      {skill}
+                    </div>
+                  )
+                )}
+              </div>
             </section>
           )}
 
-          {resumeData.education.length > 0 && (
-            <section className="mt-5">
-              <h2 className="mb-2 text-[8px] font-bold uppercase tracking-[0.12em] text-indigo-700">
-                Education
-              </h2>
+          {skills.soft.length > 0 && (
+            <section className="py-5">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-white">
+                Soft Skills
+              </p>
 
-              <EducationContent
-                resumeData={resumeData}
-                compact
-              />
-            </section>
-          )}
-
-          {resumeData.certifications.length > 0 && (
-            <section className="mt-5">
-              <h2 className="mb-2 text-[8px] font-bold uppercase tracking-[0.12em] text-indigo-700">
-                Certifications
-              </h2>
-
-              <CertificationsContent
-                resumeData={resumeData}
-                compact
-              />
+              <div className="space-y-2">
+                {skills.soft.map((skill, index) => (
+                  <div
+                    key={`${skill}-${index}`}
+                    className="text-[9px] text-slate-300"
+                  >
+                    {skill}
+                  </div>
+                ))}
+              </div>
             </section>
           )}
         </aside>
 
-        <main className="px-7 py-7">
-          {resumeData.professional_summary?.trim() && (
-            <section>
-              <SectionTitle>
-                Summary
-              </SectionTitle>
-
-              <SummaryContent
-                resumeData={resumeData}
+        <main className="px-[32px] py-[35px]">
+          {hasText(professional_summary) && (
+            <section className="mb-7">
+              <SectionTitle
+                title="Professional Summary"
               />
+
+              <p className="text-[10.5px] leading-[1.6] text-slate-600">
+                {professional_summary}
+              </p>
             </section>
           )}
 
-          {resumeData.experience.length > 0 && (
-            <section className="mt-5">
-              <SectionTitle>
-                Experience
-              </SectionTitle>
+          {validExperience.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle title="Experience" />
 
-              <ExperienceContent
-                resumeData={resumeData}
-              />
+              {validExperience.map((item, index) => (
+                <ExperienceBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
             </section>
           )}
 
-          {resumeData.internships.length > 0 && (
-            <section className="mt-5">
-              <SectionTitle>
-                Internships
-              </SectionTitle>
+          {validProjects.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle title="Projects" />
 
-              <InternshipsContent
-                resumeData={resumeData}
-              />
+              {validProjects.map((item, index) => (
+                <ProjectBlock
+                  key={index}
+                  item={item}
+                />
+              ))}
             </section>
           )}
 
-          {resumeData.projects.length > 0 && (
-            <section className="mt-5">
-              <SectionTitle>
-                Projects
-              </SectionTitle>
+          {validInternships.length > 0 && (
+            <section className="mb-7">
+              <SectionTitle title="Internships" />
 
-              <ProjectsContent
-                resumeData={resumeData}
-              />
+              {validInternships.map(
+                (item, index) => (
+                  <InternshipBlock
+                    key={index}
+                    item={item}
+                  />
+                )
+              )}
             </section>
           )}
+
+          <div className="grid grid-cols-2 gap-8">
+            {validEducation.length > 0 && (
+              <section>
+                <SectionTitle title="Education" />
+
+                {validEducation.map(
+                  (item, index) => (
+                    <EducationBlock
+                      key={index}
+                      item={item}
+                    />
+                  )
+                )}
+              </section>
+            )}
+
+            {validCertifications.length > 0 && (
+              <section>
+                <SectionTitle title="Certifications" />
+
+                {validCertifications.map(
+                  (item, index) => (
+                    <CertificationBlock
+                      key={index}
+                      item={item}
+                    />
+                  )
+                )}
+              </section>
+            )}
+          </div>
         </main>
       </div>
-    </ResumePage>
+    </div>
   );
 }
+
+/* =========================================================
+   MODERN HEADER
+========================================================= */
 
 function ModernHeaderTemplate({
   resumeData,
 }: {
   resumeData: ResumeData;
 }) {
-  const personal = resumeData.personal_info;
+  const {
+    personal_info,
+    professional_summary,
+    skills,
+  } = resumeData;
+
+  const {
+    validExperience,
+    validInternships,
+    validEducation,
+    validProjects,
+    validCertifications,
+  } = useResumeSections(resumeData);
 
   return (
-    <ResumePage>
-      <header className="bg-slate-800 px-[52px] py-8 text-white">
-        <h1 className="text-[24px] font-bold">
-          {personal.full_name || "Your Name"}
-        </h1>
+    <div
+      className="h-[1123px] w-[794px] overflow-hidden bg-white"
+      style={{
+        fontFamily:
+          'Inter, ui-sans-serif, system-ui, sans-serif',
+      }}
+    >
+      <header className="border-b-4 border-[#2563EB] px-[42px] pb-[23px] pt-[35px]">
+        <div className="flex items-end justify-between gap-7">
+          <div>
+            <h1 className="text-[30px] font-extrabold tracking-[-0.045em] text-[#111827]">
+              {personal_info.full_name || "Your Name"}
+            </h1>
 
-        {personal.professional_title && (
-          <p className="mt-1 text-[10px] font-medium text-sky-300">
-            {personal.professional_title}
-          </p>
-        )}
+            <p className="mt-2 text-[12.5px] font-semibold text-[#2563EB]">
+              {personal_info.professional_title ||
+                "Professional Title"}
+            </p>
+          </div>
 
-        <ContactInfo
-          resumeData={resumeData}
-          className="mt-2 justify-start text-slate-300"
-        />
-      </header>
+          <div className="text-right text-[8.5px] leading-[1.8] text-slate-500">
+            {personal_info.email && (
+              <div>{personal_info.email}</div>
+            )}
+            {personal_info.phone && (
+              <div>{personal_info.phone}</div>
+            )}
+            {personal_info.location && (
+              <div>{personal_info.location}</div>
+            )}
+          </div>
+        </div>
 
-      <div className="h-1 bg-sky-500" />
-
-      <main className="px-[52px] py-8">
-        <div className="space-y-4">
-          {resumeData.professional_summary?.trim() && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Professional Summary
-              </h2>
-
-              <SummaryContent
-                resumeData={resumeData}
-              />
-            </section>
+        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-[8.5px] text-[#2563EB]">
+          {personal_info.linkedin && (
+            <span>{cleanUrl(personal_info.linkedin)}</span>
           )}
 
-          {(resumeData.skills.technical.length > 0 ||
-            resumeData.skills.soft.length > 0 ||
-            resumeData.skills.other.length > 0) && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Skills
-              </h2>
-
-              <SkillsContent
-                resumeData={resumeData}
-              />
-            </section>
+          {personal_info.github && (
+            <span>{cleanUrl(personal_info.github)}</span>
           )}
 
-          {resumeData.experience.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Experience
-              </h2>
-
-              <ExperienceContent
-                resumeData={resumeData}
-              />
-            </section>
-          )}
-
-          {resumeData.internships.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Internships
-              </h2>
-
-              <InternshipsContent
-                resumeData={resumeData}
-              />
-            </section>
-          )}
-
-          {resumeData.projects.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Projects
-              </h2>
-
-              <ProjectsContent
-                resumeData={resumeData}
-              />
-            </section>
-          )}
-
-          {resumeData.education.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Education
-              </h2>
-
-              <EducationContent
-                resumeData={resumeData}
-              />
-            </section>
-          )}
-
-          {resumeData.certifications.length > 0 && (
-            <section>
-              <h2 className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-sky-700">
-                Certifications
-              </h2>
-
-              <CertificationsContent
-                resumeData={resumeData}
-              />
-            </section>
+          {personal_info.portfolio && (
+            <span>{cleanUrl(personal_info.portfolio)}</span>
           )}
         </div>
+      </header>
+
+      <main className="px-[42px] py-[26px]">
+        {hasText(professional_summary) && (
+          <section className="mb-6">
+            <SectionTitle title="Professional Summary" />
+
+            <p className="max-w-[690px] text-[10.5px] leading-[1.55] text-slate-600">
+              {professional_summary}
+            </p>
+          </section>
+        )}
+
+        <div className="grid grid-cols-[1fr_220px] gap-[30px]">
+          <div>
+            {validExperience.length > 0 && (
+              <section className="mb-6">
+                <SectionTitle title="Experience" />
+
+                {validExperience.map((item, index) => (
+                  <ExperienceBlock
+                    key={index}
+                    item={item}
+                  />
+                ))}
+              </section>
+            )}
+
+            {validProjects.length > 0 && (
+              <section className="mb-6">
+                <SectionTitle title="Projects" />
+
+                {validProjects.map(
+                  (item, index) => (
+                    <ProjectBlock
+                      key={index}
+                      item={item}
+                    />
+                  )
+                )}
+              </section>
+            )}
+
+            {validInternships.length > 0 && (
+              <section>
+                <SectionTitle title="Internships" />
+
+                {validInternships.map(
+                  (item, index) => (
+                    <InternshipBlock
+                      key={index}
+                      item={item}
+                    />
+                  )
+                )}
+              </section>
+            )}
+          </div>
+
+          <aside className="border-l border-slate-200 pl-[22px]">
+            {skills.technical.length > 0 && (
+              <section className="mb-7">
+                <SectionTitle title="Skills" />
+
+                <SkillList
+                  skills={skills.technical}
+                  chip
+                />
+              </section>
+            )}
+
+            {skills.soft.length > 0 && (
+              <section className="mb-7">
+                <SectionTitle title="Soft Skills" />
+
+                <SkillList
+                  skills={skills.soft}
+                  chip
+                />
+              </section>
+            )}
+
+            {validEducation.length > 0 && (
+              <section className="mb-7">
+                <SectionTitle title="Education" />
+
+                {validEducation.map(
+                  (item, index) => (
+                    <EducationBlock
+                      key={index}
+                      item={item}
+                    />
+                  )
+                )}
+              </section>
+            )}
+
+            {validCertifications.length > 0 && (
+              <section>
+                <SectionTitle title="Certifications" />
+
+                {validCertifications.map(
+                  (item, index) => (
+                    <CertificationBlock
+                      key={index}
+                      item={item}
+                    />
+                  )
+                )}
+              </section>
+            )}
+          </aside>
+        </div>
       </main>
-    </ResumePage>
+    </div>
   );
 }
 
-function renderTemplate(
-  template: ResumeTemplate,
-  resumeData: ResumeData
-) {
-  switch (template) {
+/* =========================================================
+   TEMPLATE SWITCHER
+========================================================= */
+
+function TemplateRenderer({
+  template,
+  resumeData,
+}: {
+  template: string;
+  resumeData: ResumeData;
+}) {
+  const selected = normalizeTemplate(template);
+
+  switch (selected) {
     case "modern-blue":
       return (
         <ModernBlueTemplate
@@ -1795,31 +2162,105 @@ function renderTemplate(
   }
 }
 
-export default function ResumePreview({
+/* =========================================================
+   MAIN PREVIEW
+========================================================= */
+
+function ResumePreview({
   resumeData,
   template,
 }: ResumePreviewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const container = containerRef.current;
+
+    if (!container) return;
+
+    const updateScale = () => {
+      const availableWidth = container.clientWidth - 24;
+
+      if (!availableWidth) return;
+
+      setScale(
+        Math.min(
+          availableWidth / PAGE_WIDTH,
+          1
+        )
+      );
+    };
+
+    updateScale();
+
+    const observer = new ResizeObserver(
+      updateScale
+    );
+
+    observer.observe(container);
+
+    window.addEventListener(
+      "resize",
+      updateScale
+    );
+
+    return () => {
+      observer.disconnect();
+
+      window.removeEventListener(
+        "resize",
+        updateScale
+      );
+    };
+  }, []);
+
+  const scaledWidth = PAGE_WIDTH * scale;
+  const scaledHeight = PAGE_HEIGHT * scale;
+
   return (
     <div className="w-full">
-      <div className="mb-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-900">
+      <div className="mb-3">
+        <h2 className="text-lg font-semibold text-slate-800">
           Resume Preview
         </h2>
 
         <p className="mt-0.5 text-xs text-slate-500">
-          Your resume updates automatically as you enter
+          Your resume updates as you edit the
           information.
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100 p-3 shadow-sm">
-        <div id="resume-preview-document">
-          {renderTemplate(
-            template,
-            resumeData
-          )}
+      <div
+        ref={containerRef}
+        className="w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 p-3 shadow-[0_12px_35px_rgba(15,23,42,0.08)]"
+      >
+        <div
+          className="relative mx-auto overflow-hidden"
+          style={{
+            width: `${scaledWidth}px`,
+            height: `${scaledHeight}px`,
+          }}
+        >
+          <div
+            id="resume-preview-document"
+            data-template={template}
+            className="resume-a4-page absolute left-0 top-0 origin-top-left"
+            style={{
+              width: `${PAGE_WIDTH}px`,
+              height: `${PAGE_HEIGHT}px`,
+              transform: `scale(${scale})`,
+            }}
+          >
+            <TemplateRenderer
+              template={template}
+              resumeData={resumeData}
+            />
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+export default ResumePreview;
